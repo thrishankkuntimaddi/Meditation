@@ -5,8 +5,10 @@ import { useSession } from './hooks/useSession';
 import { saveSession } from './firebase/sessions';
 import { updateStreak } from './utils/localStorage';
 import { useAuth } from './context/AuthContext';
+import { usePWAUpdate } from './hooks/usePWAUpdate';
 
 import BottomNav from './components/BottomNav';
+import UpdateBanner from './components/UpdateBanner';
 import HomeScreen from './screens/HomeScreen';
 import EditorScreen from './screens/EditorScreen';
 import SessionScreen from './screens/SessionScreen';
@@ -18,6 +20,7 @@ const AppInner: React.FC = () => {
   const [activePreset, setActivePreset] = useState<Preset | null>(null);
   const { user } = useAuth();
   const { sessionData, start, pause, resume, stop } = useSession();
+  const { updateAvailable, updateApp } = usePWAUpdate();
 
   const handleStart = (preset: Preset) => {
     setActivePreset(preset);
@@ -58,6 +61,9 @@ const AppInner: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-stone-50" style={{ maxWidth: 480, margin: '0 auto', position: 'relative' }}>
+      {/* PWA update banner — floats at top when new version is ready */}
+      {updateAvailable && <UpdateBanner onUpdate={updateApp} />}
+
       {screen === 'home' && (
         <HomeScreen
           onStartSession={handleStart}

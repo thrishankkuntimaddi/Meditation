@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { signIn, signUp, signOutUser } from '../firebase/auth';
 import { soundEngine } from '../engines/SoundEngine';
+import { usePWAUpdate } from '../hooks/usePWAUpdate';
 import type { BellSound } from '../types';
 
 const ProfileScreen: React.FC = () => {
@@ -13,6 +14,7 @@ const ProfileScreen: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [bell, setBell] = useState<BellSound>('crystal');
+  const { updateAvailable, updateApp } = usePWAUpdate();
 
   const handleAuth = async () => {
     setError('');
@@ -39,7 +41,7 @@ const ProfileScreen: React.FC = () => {
 
   if (user) {
     return (
-      <div className="flex flex-col min-h-screen bg-stone-50 pb-24">
+      <div className="flex flex-col min-h-screen bg-stone-50" style={{ paddingBottom: 88 }}>
         <div className="px-6 pt-14 pb-6">
           <p className="text-xs text-stone-400 tracking-widest uppercase mb-1" style={{ letterSpacing: '0.2em' }}>Profile</p>
           <h2 className="text-2xl font-light text-stone-700">
@@ -74,15 +76,42 @@ const ProfileScreen: React.FC = () => {
         </div>
 
         {/* About */}
-        <div className="px-6 mb-6 p-4 mx-6 rounded-2xl" style={{ background: '#F5F5F4' }}>
-          <p className="text-sm text-stone-500 font-medium mb-1">Nistha</p>
-          <p className="text-xs text-stone-400">
-            A calm meditation companion. Synthesized bells, drift-free timing, offline-ready.
-          </p>
+        <div className="px-6 mb-6">
+          <div className="p-4 rounded-2xl" style={{ background: '#F5F5F4' }}>
+            <p className="text-sm text-stone-500 font-medium mb-1">Nistha</p>
+            <p className="text-xs text-stone-400">
+              A calm meditation companion. Synthesized bells, drift-free timing, offline-ready.
+            </p>
+          </div>
+        </div>
+
+        {/* Update App */}
+        <div className="px-6 mb-3">
+          <button
+            id="update-app-profile-btn"
+            onClick={updateApp}
+            className="w-full py-4 rounded-2xl text-sm font-medium flex items-center justify-center gap-2 transition-all"
+            style={{
+              background: updateAvailable ? '#1C1917' : '#F5F5F4',
+              color: updateAvailable ? '#FAFAF9' : '#A8A29E',
+              border: updateAvailable ? 'none' : '1.5px solid rgba(120,113,108,0.18)',
+              cursor: updateAvailable ? 'pointer' : 'default',
+            }}
+          >
+            {updateAvailable && (
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%',
+                background: '#86EFAC', flexShrink: 0,
+                boxShadow: '0 0 6px rgba(134,239,172,0.6)',
+                display: 'inline-block',
+              }} />
+            )}
+            {updateAvailable ? 'Update App — New version ready' : 'App is up to date'}
+          </button>
         </div>
 
         {/* Sign out */}
-        <div className="px-6 mt-auto">
+        <div className="px-6">
           <button
             id="signout-btn"
             onClick={signOutUser}
@@ -97,7 +126,7 @@ const ProfileScreen: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-stone-50 pb-24">
+    <div className="flex flex-col min-h-screen bg-stone-50" style={{ paddingBottom: 88 }}>
       <div className="px-6 pt-14 pb-8">
         <p className="text-xs text-stone-400 tracking-widest uppercase mb-1" style={{ letterSpacing: '0.2em' }}>Profile</p>
         <h2 className="text-2xl font-light text-stone-700">

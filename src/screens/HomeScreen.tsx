@@ -29,7 +29,7 @@ const HomeScreen: React.FC<Props> = ({ onStartSession, onGoEditor }) => {
   const activePreset = selected ?? presets[0] ?? null;
 
   return (
-    <div className="flex flex-col min-h-screen bg-stone-50 pb-20">
+    <div className="flex flex-col min-h-screen bg-stone-50" style={{ paddingBottom: 88 }}>
       {/* Header */}
       <div className="px-6 pt-14 pb-6">
         <p className="text-xs text-stone-400 tracking-widest uppercase" style={{ letterSpacing: '0.2em' }}>Nistha</p>

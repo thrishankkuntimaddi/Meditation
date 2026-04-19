@@ -8,7 +8,7 @@ interface Props {
 
 const NAV_ITEMS: { screen: Screen; label: string; icon: string }[] = [
   { screen: 'home',    label: 'Home',    icon: '◎' },
-  { screen: 'editor',  label: 'Editor',  icon: '⊞' },
+  { screen: 'editor',  label: 'Presets',  icon: '⊞' },
   { screen: 'history', label: 'History', icon: '◷' },
   { screen: 'profile', label: 'Profile', icon: '◯' },
 ];
@@ -17,11 +17,12 @@ const BottomNav: React.FC<Props> = ({ current, onChange }) => (
   <nav
     className="fixed bottom-0 left-0 right-0 z-50 flex justify-around items-center"
     style={{
-      height: 64,
-      background: 'rgba(250,250,249,0.92)',
-      backdropFilter: 'blur(16px)',
-      WebkitBackdropFilter: 'blur(16px)',
+      height: 72,
+      background: 'rgba(250,250,249,0.95)',
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
       borderTop: '1px solid rgba(120,113,108,0.12)',
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
     }}
   >
     {NAV_ITEMS.map(({ screen, label, icon }) => {
@@ -31,18 +32,36 @@ const BottomNav: React.FC<Props> = ({ current, onChange }) => (
           key={screen}
           id={`nav-${screen}`}
           onClick={() => onChange(screen)}
-          className="flex flex-col items-center justify-center gap-0.5 w-16 h-full"
-          style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+          className="flex flex-col items-center justify-center gap-1"
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            minWidth: 64,
+            minHeight: 56,
+            padding: '6px 12px',
+          }}
         >
           <span
-            className="text-lg transition-all duration-200"
-            style={{ color: active ? '#44403C' : '#A8A29E', transform: active ? 'scale(1.15)' : 'scale(1)' }}
+            style={{
+              fontSize: 26,
+              lineHeight: 1,
+              color: active ? '#44403C' : '#A8A29E',
+              transform: active ? 'scale(1.1)' : 'scale(1)',
+              transition: 'transform 0.2s ease, color 0.2s ease',
+              display: 'block',
+            }}
           >
             {icon}
           </span>
           <span
-            className="text-xs font-medium transition-colors duration-200"
-            style={{ color: active ? '#44403C' : '#A8A29E' }}
+            style={{
+              fontSize: 11,
+              fontWeight: active ? 600 : 400,
+              color: active ? '#44403C' : '#A8A29E',
+              transition: 'color 0.2s ease',
+              letterSpacing: '0.02em',
+            }}
           >
             {label}
           </span>
