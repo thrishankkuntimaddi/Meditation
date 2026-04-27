@@ -3,6 +3,8 @@ import type { Preset } from '../types';
 import type { SessionData } from '../hooks/useSession';
 import BreathingCircle from '../components/BreathingCircle';
 import CountdownOverlay from '../components/CountdownOverlay';
+import FocusModeGuard from '../components/FocusModeGuard';
+import { useFocusMode } from '../hooks/useFocusMode';
 import { formatTime } from '../utils/formatTime';
 
 interface Props {
@@ -16,15 +18,18 @@ interface Props {
 const SessionScreen: React.FC<Props> = ({ preset, sessionData, onPause, onResume, onEnd }) => {
   const { status, countdown, elapsed, remaining, total, phaseState } = sessionData;
   const [eyesClosed, setEyesClosed] = useState(false);
+  // Show the focus-mode guard once per session start
+  const [showGuard, setShowGuard] = useState(true);
 
-  // Lock screen wake on mobile
+  // Activate focus mode (wake lock, notification suppression, title override)
+  // as soon as the countdown begins and keep it on until session ends.
+  const isActive = status === 'countdown' || status === 'running' || status === 'paused';
+  useFocusMode(isActive);
+
+  // Reset guard so it shows again on a fresh session
   useEffect(() => {
-    let wakeLock: any = null;
-    if ('wakeLock' in navigator) {
-      (navigator as any).wakeLock.request('screen').then((wl: any) => { wakeLock = wl; }).catch(() => {});
-    }
-    return () => { wakeLock?.release?.(); };
-  }, []);
+    if (status === 'countdown') setShowGuard(true);
+  }, [status]);
 
   const progress = total > 0 ? elapsed / total : 0;
   const circumference = 2 * Math.PI * 54;
@@ -63,6 +68,12 @@ const SessionScreen: React.FC<Props> = ({ preset, sessionData, onPause, onResume
   }
 
   return (
+    <>
+      {/* Focus Mode Guard — shown once at the start of every session */}
+      {showGuard && isActive && (
+        <FocusModeGuard onDismiss={() => setShowGuard(false)} />
+      )}
+
     <div
       className="fixed inset-0 flex flex-col items-center justify-between transition-all duration-700"
       style={{
@@ -162,6 +173,7 @@ const SessionScreen: React.FC<Props> = ({ preset, sessionData, onPause, onResume
         </div>
       </div>
     </div>
+    </>
   );
 };
 
