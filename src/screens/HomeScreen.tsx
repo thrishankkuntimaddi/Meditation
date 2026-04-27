@@ -32,7 +32,7 @@ const HomeScreen: React.FC<Props> = ({ onStartSession, onGoEditor }) => {
     <div className="flex flex-col min-h-screen bg-stone-50" style={{ paddingBottom: 88 }}>
       {/* Header */}
       <div className="px-6 pt-14 pb-6">
-        <p className="text-xs text-stone-400 tracking-widest uppercase" style={{ letterSpacing: '0.2em' }}>Nistha</p>
+        <p className="text-xs text-stone-400 tracking-widest uppercase" style={{ letterSpacing: '0.2em' }}>Meditation</p>
         <h1 className="text-2xl font-light text-stone-700 mt-1">{greeting}</h1>
       </div>
 

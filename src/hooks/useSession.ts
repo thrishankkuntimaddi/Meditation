@@ -25,10 +25,13 @@ export const useSession = () => {
   const timerRef = useRef<TimerEngine | null>(null);
   const phaseManagerRef = useRef<PhaseManager | null>(null);
   const presetRef = useRef<Preset | null>(null);
+  const totalDurationRef = useRef<number>(0);
   const prevElapsedRef = useRef(0);
   const countdownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guard: prevent saving session more than once per session
+  const sessionSavedRef = useRef(false);
 
-  const total = presetRef.current?.totalDuration ?? 0;
+  const total = totalDurationRef.current;
 
   const cleanup = useCallback(() => {
     timerRef.current?.stop();
@@ -37,13 +40,18 @@ export const useSession = () => {
 
   const start = useCallback((preset: Preset) => {
     cleanup();
+    sessionSavedRef.current = false;
     presetRef.current = preset;
+
+    // Unlock & configure audio — must happen in a user-gesture call chain
     soundEngine.unlock();
     soundEngine.setBellType(preset.bellSound);
 
     // Calculate totalDuration from phases
     const totalDuration = preset.phases.reduce((sum, p) => sum + p.duration, 0);
-    presetRef.current = { ...preset, totalDuration };
+    const fullPreset = { ...preset, totalDuration };
+    presetRef.current = fullPreset;
+    totalDurationRef.current = totalDuration;
 
     setStatus('countdown');
     setCountdown(3);
@@ -59,13 +67,16 @@ export const useSession = () => {
         countdownRef.current = setTimeout(tick, 1000);
       } else {
         setCountdown(0);
-        beginSession(preset, totalDuration);
+        beginSession(fullPreset, totalDuration);
       }
     };
     countdownRef.current = setTimeout(tick, 1000);
   }, [cleanup]);
 
   const beginSession = (preset: Preset, totalDuration: number) => {
+    // Ensure sound engine bell type is correct (may have changed in editor)
+    soundEngine.setBellType(preset.bellSound);
+
     const pm = new PhaseManager(preset.phases, (state) => {
       setPhaseState(state);
     });
@@ -107,7 +118,9 @@ export const useSession = () => {
     setElapsed(0);
     setPhaseState(null);
     presetRef.current = null;
+    totalDurationRef.current = 0;
     prevElapsedRef.current = 0;
+    sessionSavedRef.current = false;
   }, [cleanup]);
 
   useEffect(() => () => cleanup(), [cleanup]);
@@ -121,5 +134,13 @@ export const useSession = () => {
     phaseState,
   };
 
-  return { sessionData, start, pause, resume, stop, preset: presetRef.current };
+  return {
+    sessionData,
+    start,
+    pause,
+    resume,
+    stop,
+    preset: presetRef.current,
+    sessionSavedRef,
+  };
 };

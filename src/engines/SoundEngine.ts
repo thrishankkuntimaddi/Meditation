@@ -45,29 +45,40 @@ const BELL_CONFIGS: Record<BellType, BellConfig> = {
 export class SoundEngine {
   private ctx: AudioContext | null = null;
   private bellType: BellType = 'crystal';
-  private unlocked = false;
 
   setBellType(type: BellType) {
     this.bellType = type;
   }
 
-  /** Must be called from a user gesture to unlock AudioContext */
-  unlock() {
-    if (this.unlocked) return;
-    this.ctx = new AudioContext();
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-    this.unlocked = true;
+  getBellType(): BellType {
+    return this.bellType;
   }
 
-  private getCtx(): AudioContext {
+  /**
+   * Must be called from a user gesture to unlock AudioContext.
+   * Safe to call multiple times.
+   */
+  unlock() {
     if (!this.ctx) {
       this.ctx = new AudioContext();
-      this.unlocked = true;
     }
     if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
+    }
+  }
+
+  /**
+   * Returns a ready AudioContext, creating one if needed.
+   * Always resumes if suspended.
+   */
+  private async getCtx(): Promise<AudioContext> {
+    if (!this.ctx) {
+      this.ctx = new AudioContext();
+    }
+    if (this.ctx.state === 'suspended') {
+      try {
+        await this.ctx.resume();
+      } catch (_) {}
     }
     return this.ctx;
   }
@@ -98,32 +109,35 @@ export class SoundEngine {
 
   /** Single bell */
   playBell() {
-    const ctx = this.getCtx();
-    const config = BELL_CONFIGS[this.bellType];
-    this.synthesizeBell(ctx, config, ctx.currentTime);
-    this.haptic();
+    this.getCtx().then(ctx => {
+      const config = BELL_CONFIGS[this.bellType];
+      this.synthesizeBell(ctx, config, ctx.currentTime);
+      this.haptic();
+    }).catch(() => {});
   }
 
   /** Double bell (end of phase) */
   playDoubleBell() {
-    const ctx = this.getCtx();
-    const config = BELL_CONFIGS[this.bellType];
-    const t = ctx.currentTime;
-    this.synthesizeBell(ctx, config, t);
-    this.synthesizeBell(ctx, config, t + config.totalDecay * 0.4, 0.7);
-    this.haptic([100, 50, 100]);
+    this.getCtx().then(ctx => {
+      const config = BELL_CONFIGS[this.bellType];
+      const t = ctx.currentTime;
+      this.synthesizeBell(ctx, config, t);
+      this.synthesizeBell(ctx, config, t + config.totalDecay * 0.4, 0.7);
+      this.haptic([100, 50, 100]);
+    }).catch(() => {});
   }
 
   /** Quad bell (session complete) */
   playQuadBell() {
-    const ctx = this.getCtx();
-    const config = BELL_CONFIGS[this.bellType];
-    const t = ctx.currentTime;
-    const gap = config.totalDecay * 0.35;
-    [0, gap, gap * 2, gap * 3].forEach((offset, i) => {
-      this.synthesizeBell(ctx, config, t + offset, 0.8 - i * 0.06);
-    });
-    this.haptic([100, 80, 100, 80, 100, 80, 150]);
+    this.getCtx().then(ctx => {
+      const config = BELL_CONFIGS[this.bellType];
+      const t = ctx.currentTime;
+      const gap = config.totalDecay * 0.35;
+      [0, gap, gap * 2, gap * 3].forEach((offset, i) => {
+        this.synthesizeBell(ctx, config, t + offset, 0.8 - i * 0.06);
+      });
+      this.haptic([100, 80, 100, 80, 100, 80, 150]);
+    }).catch(() => {});
   }
 
   private haptic(pattern: number[] | number = 200) {

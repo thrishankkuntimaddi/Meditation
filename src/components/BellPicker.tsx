@@ -1,5 +1,6 @@
 import React from 'react';
 import type { BellSound } from '../types';
+import { soundEngine } from '../engines/SoundEngine';
 
 interface Props {
   value: BellSound;
@@ -18,7 +19,13 @@ const BellPicker: React.FC<Props> = ({ value, onChange }) => (
       <button
         key={b.id}
         id={`bell-${b.id}`}
-        onClick={() => onChange(b.id)}
+        onClick={() => {
+          // Unlock audio context (user gesture) then preview the bell
+          soundEngine.unlock();
+          soundEngine.setBellType(b.id);
+          soundEngine.playBell();
+          onChange(b.id);
+        }}
         className="flex-1 min-w-[90px] flex flex-col items-center gap-1 py-3 px-2 rounded-xl transition-all duration-200"
         style={{
           background: value === b.id ? '#F5F5F4' : 'transparent',

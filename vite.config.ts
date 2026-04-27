@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['favicon.svg', 'icons/*.png'],
       manifest: {
-        name: 'Nistha — Meditation',
-        short_name: 'Nistha',
+        name: 'Meditation',
+        short_name: 'Meditation',
         description: 'Calm, distraction-free meditation timer',
         theme_color: '#FAFAFA',
         background_color: '#FAFAFA',

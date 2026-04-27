@@ -20,10 +20,14 @@ const newPhase = (): Phase => ({
 });
 
 const EditorScreen: React.FC<Props> = ({ editPreset, onDone }) => {
-  const { presets, save } = usePresets();
+  const { presets, save, remove } = usePresets();
   const [activeId, setActiveId] = useState<string>(editPreset?.id ?? presets[0]?.id ?? '');
 
   const preset = presets.find(p => p.id === activeId) ?? presets[0];
+
+  // Built-in preset names that cannot be deleted
+  const PROTECTED = ['Morning', 'Evening', 'Night'];
+  const canDelete = preset && !PROTECTED.includes(preset.name);
 
   const update = (patch: Partial<Preset>) => {
     if (!preset) return;
@@ -53,6 +57,16 @@ const EditorScreen: React.FC<Props> = ({ editPreset, onDone }) => {
     const [moved] = phases.splice(from, 1);
     phases.splice(to, 0, moved);
     update({ phases });
+  };
+
+  const deletePreset = () => {
+    if (!preset || !canDelete) return;
+    const remaining = presets.filter(p => p.id !== preset.id);
+    remove(preset.id);
+    // Switch to first remaining preset
+    if (remaining.length > 0) {
+      setActiveId(remaining[0].id);
+    }
   };
 
   const saveNewPreset = () => {
@@ -87,7 +101,7 @@ const EditorScreen: React.FC<Props> = ({ editPreset, onDone }) => {
         <h2 className="text-2xl font-light text-stone-700">Configure</h2>
       </div>
 
-      {/* Preset tabs */}
+      {/* Preset tabs + delete */}
       <div className="px-6 mb-5">
         <div
           className="flex overflow-x-auto gap-2 pb-1"
@@ -117,6 +131,17 @@ const EditorScreen: React.FC<Props> = ({ editPreset, onDone }) => {
             + New
           </button>
         </div>
+        {/* Delete current preset (only for non-built-in presets) */}
+        {canDelete && (
+          <button
+            id="delete-preset-btn"
+            onClick={deletePreset}
+            className="mt-2 text-xs text-red-400 hover:text-red-600 transition-colors"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}
+          >
+            🗑 Delete "{preset?.name}" preset
+          </button>
+        )}
       </div>
 
       <div className="px-6 flex flex-col gap-5">
