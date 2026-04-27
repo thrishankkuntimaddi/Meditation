@@ -10,6 +10,7 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['favicon.svg', 'icons/*.png'],
       manifest: {
+        id: '/Meditation/',
         name: 'Meditation',
         short_name: 'Meditation',
         description: 'Calm, distraction-free meditation timer',
@@ -24,6 +25,7 @@ export default defineConfig({
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
       },
+
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
