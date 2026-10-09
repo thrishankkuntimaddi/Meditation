@@ -1,95 +1,86 @@
-import React, { useEffect, useRef } from 'react';
-import type { BreathStep } from '../types';
+import React from 'react';
+import type { BreathStep, PhaseType } from '../types';
 
 interface Props {
   breathStep: BreathStep | null;
   stepDuration: number;      // seconds for current step
   stepElapsed: number;       // seconds elapsed in current step
   isRunning: boolean;
-  phaseType: string;
+  phaseType: PhaseType;
+  progress: number;          // 0..1 of the whole session
 }
 
-const STEP_LABELS: Record<string, string> = {
-  inhale: 'Inhale',
+const STEP_LABELS: Record<BreathStep, string> = {
+  inhale: 'Breathe in',
   hold: 'Hold',
-  exhale: 'Exhale',
+  exhale: 'Breathe out',
   holdAfterExhale: 'Hold',
 };
 
-const STEP_COLORS: Record<string, string> = {
-  inhale: 'rgba(120,113,108,0.18)',
-  hold: 'rgba(120,113,108,0.10)',
-  exhale: 'rgba(120,113,108,0.07)',
-  holdAfterExhale: 'rgba(120,113,108,0.10)',
-};
+const SIZE = 280;
+const RING_R = 134;
+const CIRC = 2 * Math.PI * RING_R;
+const MIN_SCALE = 0.72;
+const MAX_SCALE = 1;
 
-const BreathingCircle: React.FC<Props> = ({
-  breathStep, stepDuration, stepElapsed, isRunning, phaseType
-}) => {
-  const circleRef = useRef<HTMLDivElement>(null);
-  const outerRef = useRef<HTMLDivElement>(null);
+// Ease the orb so it moves like a breath, not a metronome
+const ease = (t: number) => 0.5 - Math.cos(Math.PI * Math.min(1, Math.max(0, t))) / 2;
 
-  // Compute scale: inhale → expand, exhale → contract
-  const progress = stepDuration > 0 ? Math.min(stepElapsed / stepDuration, 1) : 0;
+const BreathingCircle: React.FC<Props> = ({ breathStep, stepDuration, stepElapsed, isRunning, phaseType, progress }) => {
+  const t = stepDuration > 0 ? stepElapsed / stepDuration : 0;
+  const isBreathing = phaseType === 'breathing' && breathStep !== null;
 
-  let scale = 1;
-  if (breathStep === 'inhale') scale = 1 + 0.35 * progress;
-  else if (breathStep === 'exhale') scale = 1.35 - 0.35 * progress;
-  else if (breathStep === 'hold') scale = 1.35;
-  else if (breathStep === 'holdAfterExhale') scale = 1;
+  let scale = 0.86;
+  if (isBreathing) {
+    if (breathStep === 'inhale') scale = MIN_SCALE + (MAX_SCALE - MIN_SCALE) * ease(t);
+    else if (breathStep === 'exhale') scale = MAX_SCALE - (MAX_SCALE - MIN_SCALE) * ease(t);
+    else if (breathStep === 'hold') scale = MAX_SCALE;
+    else scale = MIN_SCALE;
+  }
 
-  // For silent/interval phases — gentle idle pulse
-  const isIdle = !breathStep || phaseType !== 'breathing';
-
-  useEffect(() => {
-    const el = circleRef.current;
-    if (!el) return;
-    if (!isIdle) {
-      el.style.transform = `scale(${scale})`;
-      el.style.transition = 'transform 0.12s linear';
-    }
-  }, [scale, isIdle]);
-
-  const ringColor = breathStep ? STEP_COLORS[breathStep] : 'rgba(120,113,108,0.10)';
-  const label = breathStep ? STEP_LABELS[breathStep] : (phaseType === 'silent' ? 'Be Still' : 'Breathe');
+  const secondsLeft = isBreathing ? Math.max(1, Math.ceil(stepDuration - stepElapsed - 0.001)) : null;
+  const label = isBreathing ? STEP_LABELS[breathStep!] : phaseType === 'silent' ? 'Be still' : 'Rest in awareness';
 
   return (
-    <div className="flex flex-col items-center justify-center gap-6 select-none">
-      {/* Outer glow ring */}
-      <div
-        ref={outerRef}
-        className={`relative flex items-center justify-center rounded-full transition-all duration-700 ${isIdle && isRunning ? 'animate-pulse-ring' : ''}`}
-        style={{ width: 260, height: 260, background: ringColor }}
-      >
-        {/* Mid ring */}
-        <div
-          className="absolute rounded-full"
-          style={{
-            width: 220, height: 220,
-            background: 'rgba(120,113,108,0.08)',
-            border: '1px solid rgba(120,113,108,0.15)',
-          }}
+    <div className="relative select-none" style={{ width: SIZE, height: SIZE }} aria-live="polite">
+      {/* Session progress ring — wraps the orb */}
+      <svg width={SIZE} height={SIZE} className="absolute inset-0 -rotate-90" aria-hidden="true">
+        <circle cx={SIZE / 2} cy={SIZE / 2} r={RING_R} fill="none" stroke="rgb(var(--c-line) / 0.12)" strokeWidth={2} />
+        <circle
+          cx={SIZE / 2} cy={SIZE / 2} r={RING_R}
+          fill="none" stroke="rgb(var(--c-ink-2) / 0.55)" strokeWidth={2} strokeLinecap="round"
+          strokeDasharray={CIRC}
+          strokeDashoffset={CIRC * (1 - Math.min(1, progress))}
+          style={{ transition: 'stroke-dashoffset 0.4s linear' }}
         />
-        {/* Breathing circle */}
+      </svg>
+
+      {/* Soft halo for silent / interval phases */}
+      {!isBreathing && (
         <div
-          ref={circleRef}
-          className="relative flex items-center justify-center rounded-full"
+          className={`absolute inset-6 rounded-full bg-line/10 ${isRunning ? 'animate-pulse-ring' : ''}`}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* The orb */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div
+          className="rounded-full flex flex-col items-center justify-center"
           style={{
-            width: 160,
-            height: 160,
-            background: 'linear-gradient(135deg, #F5F5F4 0%, #E7E5E4 100%)',
-            boxShadow: '0 8px 40px rgba(120,113,108,0.18), inset 0 1px 2px rgba(255,255,255,0.9)',
-            border: '1.5px solid rgba(120,113,108,0.2)',
-            transform: `scale(${isIdle ? 1 : scale})`,
-            transition: isIdle ? 'none' : 'transform 0.12s linear',
+            width: 220,
+            height: 220,
+            transform: `scale(${scale})`,
+            transition: isBreathing ? 'transform 0.15s linear' : 'transform 1.2s ease-in-out',
+            background: 'radial-gradient(circle at 35% 30%, rgb(var(--c-bg)) 0%, rgb(var(--c-surface)) 45%, rgb(var(--c-surface-2)) 100%)',
+            boxShadow: '0 10px 50px rgb(var(--c-line) / 0.18), inset 0 1px 2px rgb(255 255 255 / 0.5)',
+            border: '1px solid rgb(var(--c-line) / 0.16)',
           }}
         >
-          <span
-            className="text-stone-500 text-sm font-medium tracking-widest uppercase"
-            style={{ letterSpacing: '0.15em' }}
-          >
-            {label}
-          </span>
+          <span className="text-[13px] font-medium uppercase tracking-[0.16em] text-muted">{label}</span>
+          {secondsLeft !== null && (
+            <span className="mt-1 text-3xl font-extralight text-ink2 tabular-nums">{secondsLeft}</span>
+          )}
         </div>
       </div>
     </div>

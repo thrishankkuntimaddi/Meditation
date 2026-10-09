@@ -1,8 +1,11 @@
 /**
- * SoundEngine — synthesized bell sounds via Web Audio API
- * No external audio files needed. All sounds are generated on-device.
+ * SoundEngine — synthesized bells via the Web Audio API.
+ * No audio files: every sound is generated on-device, so it works offline
+ * and inside the native shells without bundling assets.
  */
-export type BellType = 'crystal' | 'bowl' | 'chime';
+import type { BellSound, BreathStep } from '../types';
+
+export type BellType = BellSound;
 
 interface BellConfig {
   fundamental: number;
@@ -42,110 +45,140 @@ const BELL_CONFIGS: Record<BellType, BellConfig> = {
   },
 };
 
+// Soft breath cues — gentle sine tones, distinct per step
+const CUE_FREQ: Record<BreathStep, number> = {
+  inhale: 523.25,          // C5
+  hold: 392,               // G4
+  exhale: 329.63,          // E4
+  holdAfterExhale: 392,
+};
+
+type AudioCtor = typeof AudioContext;
+
 export class SoundEngine {
   private ctx: AudioContext | null = null;
   private bellType: BellType = 'crystal';
+  private volume = 0.8;
+  private silenced = false;  // forced silence (another device is meditating)
 
-  setBellType(type: BellType) {
-    this.bellType = type;
+  setBellType(type: BellType) { this.bellType = type; }
+  getBellType(): BellType { return this.bellType; }
+  setVolume(v: number) { this.volume = Math.max(0, Math.min(1, v)); }
+
+  /** When true, nothing plays — used while another synced device is meditating. */
+  setSilenced(s: boolean) {
+    this.silenced = s;
+    if (s && this.ctx && this.ctx.state === 'running') this.ctx.suspend().catch(() => {});
   }
 
-  getBellType(): BellType {
-    return this.bellType;
+  get isSilenced() { return this.silenced; }
+
+  private createCtx(): AudioContext | null {
+    const Ctor: AudioCtor | undefined =
+      window.AudioContext ?? (window as unknown as { webkitAudioContext?: AudioCtor }).webkitAudioContext;
+    return Ctor ? new Ctor() : null;
   }
 
   /**
-   * Must be called from a user gesture to unlock AudioContext.
-   * Safe to call multiple times.
+   * Must be called from a user gesture to unlock audio (iOS/Safari/Chrome autoplay
+   * policies). Plays a one-sample silent buffer, which is what iOS needs.
    */
   unlock() {
-    if (!this.ctx) {
-      this.ctx = new AudioContext();
-    }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {});
-    }
+    if (!this.ctx) this.ctx = this.createCtx();
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (ctx.state === 'suspended' && !this.silenced) ctx.resume().catch(() => {});
+    try {
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch { /* ignore */ }
   }
 
-  /**
-   * Returns a ready AudioContext, creating one if needed.
-   * Always resumes if suspended.
-   */
-  private async getCtx(): Promise<AudioContext> {
-    if (!this.ctx) {
-      this.ctx = new AudioContext();
-    }
-    if (this.ctx.state === 'suspended') {
-      try {
-        await this.ctx.resume();
-      } catch (_) {}
+  private async getCtx(): Promise<AudioContext | null> {
+    if (this.silenced) return null;
+    if (!this.ctx) this.ctx = this.createCtx();
+    if (this.ctx && this.ctx.state !== 'running') {
+      try { await this.ctx.resume(); } catch { /* ignore */ }
     }
     return this.ctx;
   }
 
-  private synthesizeBell(ctx: AudioContext, config: BellConfig, startTime: number, volume = 0.8) {
-    const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(volume, startTime);
-    masterGain.connect(ctx.destination);
+  private synthesizeBell(ctx: AudioContext, config: BellConfig, startTime: number, level = 1) {
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(this.volume * level, startTime);
+    master.connect(ctx.destination);
 
     config.partials.forEach(({ freq, gain, decay }) => {
       const osc = ctx.createOscillator();
-      const envGain = ctx.createGain();
-
+      const env = ctx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(config.fundamental * freq, startTime);
-
-      envGain.gain.setValueAtTime(0, startTime);
-      envGain.gain.linearRampToValueAtTime(gain, startTime + 0.005);
-      envGain.gain.exponentialRampToValueAtTime(0.001, startTime + decay);
-
-      osc.connect(envGain);
-      envGain.connect(masterGain);
-
+      env.gain.setValueAtTime(0, startTime);
+      env.gain.linearRampToValueAtTime(gain, startTime + 0.005);
+      env.gain.exponentialRampToValueAtTime(0.001, startTime + decay);
+      osc.connect(env);
+      env.connect(master);
       osc.start(startTime);
-      osc.stop(startTime + decay + 0.01);
+      osc.stop(startTime + decay + 0.02);
     });
   }
 
-  /** Single bell */
-  playBell() {
-    this.getCtx().then(ctx => {
-      const config = BELL_CONFIGS[this.bellType];
-      this.synthesizeBell(ctx, config, ctx.currentTime);
-      this.haptic();
-    }).catch(() => {});
+  private play(fn: (ctx: AudioContext, t: number) => void) {
+    this.getCtx().then(ctx => { if (ctx) fn(ctx, ctx.currentTime + 0.02); }).catch(() => {});
   }
 
-  /** Double bell (end of phase) */
+  /** Single bell (interval bell, preview, session start) */
+  playBell(type: BellType = this.bellType) {
+    this.play((ctx, t) => this.synthesizeBell(ctx, BELL_CONFIGS[type], t));
+    this.haptic(120);
+  }
+
+  /** Double bell (phase change) */
   playDoubleBell() {
-    this.getCtx().then(ctx => {
-      const config = BELL_CONFIGS[this.bellType];
-      const t = ctx.currentTime;
+    const config = BELL_CONFIGS[this.bellType];
+    this.play((ctx, t) => {
       this.synthesizeBell(ctx, config, t);
-      this.synthesizeBell(ctx, config, t + config.totalDecay * 0.4, 0.7);
-      this.haptic([100, 50, 100]);
-    }).catch(() => {});
+      this.synthesizeBell(ctx, config, t + config.totalDecay * 0.4, 0.85);
+    });
+    this.haptic([100, 60, 100]);
   }
 
-  /** Quad bell (session complete) */
+  /** Four bells (session complete) */
   playQuadBell() {
-    this.getCtx().then(ctx => {
-      const config = BELL_CONFIGS[this.bellType];
-      const t = ctx.currentTime;
-      const gap = config.totalDecay * 0.35;
-      [0, gap, gap * 2, gap * 3].forEach((offset, i) => {
-        this.synthesizeBell(ctx, config, t + offset, 0.8 - i * 0.06);
-      });
-      this.haptic([100, 80, 100, 80, 100, 80, 150]);
-    }).catch(() => {});
+    const config = BELL_CONFIGS[this.bellType];
+    const gap = config.totalDecay * 0.35;
+    this.play((ctx, t) => {
+      [0, 1, 2, 3].forEach(i => this.synthesizeBell(ctx, config, t + gap * i, 1 - i * 0.08));
+    });
+    this.haptic([100, 80, 100, 80, 100, 80, 160]);
   }
 
-  private haptic(pattern: number[] | number = 200) {
+  /** Soft tone marking a breath-step change */
+  playBreathCue(step: BreathStep) {
+    this.play((ctx, t) => {
+      const osc = ctx.createOscillator();
+      const env = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(CUE_FREQ[step], t);
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.18 * this.volume, t + 0.06);
+      env.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+      osc.connect(env);
+      env.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 1);
+    });
+    this.haptic(30);
+  }
+
+  private haptic(pattern: number[] | number) {
+    if (this.silenced) return;
     try {
-      if ('vibrate' in navigator) {
-        navigator.vibrate(pattern);
-      }
-    } catch (_) {}
+      if ('vibrate' in navigator) navigator.vibrate(pattern);
+    } catch { /* ignore */ }
   }
 }
 

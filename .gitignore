@@ -21,3 +21,12 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# Native builds
+dist-native/
+release/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/src/main/assets/public/

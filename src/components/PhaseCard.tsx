@@ -1,180 +1,141 @@
-import React from 'react';
-import type { Phase, PhaseType } from '../types';
+import React, { useState } from 'react';
+import type { Phase, PhaseType, BreathingConfig } from '../types';
 import { formatDuration } from '../utils/formatTime';
+import { Icon, IconButton, Segmented, Stepper, type IconName } from './ui';
 
 interface Props {
   phase: Phase;
   index: number;
   onChange: (p: Phase) => void;
-  onDelete: () => void;
+  onDelete?: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  defaultOpen?: boolean;
 }
 
-const TYPE_OPTIONS: PhaseType[] = ['breathing', 'interval', 'silent'];
+const TYPE_META: Record<PhaseType, { label: string; icon: IconName; hint: string }> = {
+  breathing: { label: 'Breathing', icon: 'wave', hint: 'Guided breath with a soft cue at each step' },
+  interval: { label: 'Interval', icon: 'bell', hint: 'Silent sitting with a bell at a steady interval' },
+  silent: { label: 'Silent', icon: 'leaf', hint: 'Complete silence until the phase ends' },
+};
 
-const PhaseCard: React.FC<Props> = ({ phase, index, onChange, onDelete, onMoveUp, onMoveDown }) => {
-  const [open, setOpen] = React.useState(false);
+const DEFAULT_BREATH: BreathingConfig = { pattern: 'square', inhale: 4, hold: 4, exhale: 4, holdAfterExhale: 4 };
 
+const Line: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div className="flex items-center justify-between gap-3 min-h-[40px]">
+    <span className="text-[13px] text-muted">{label}</span>
+    {children}
+  </div>
+);
+
+const secs = (v: number) => `${v}s`;
+
+const PhaseCard: React.FC<Props> = ({ phase, index, onChange, onDelete, onMoveUp, onMoveDown, defaultOpen }) => {
+  const [open, setOpen] = useState(!!defaultOpen);
   const update = (patch: Partial<Phase>) => onChange({ ...phase, ...patch });
-  const updateBreathing = (patch: object) =>
-    onChange({ ...phase, breathing: { ...phase.breathing!, ...patch } });
+  const breathing = phase.breathing ?? DEFAULT_BREATH;
+  const updateBreathing = (patch: Partial<BreathingConfig>) => update({ breathing: { ...breathing, ...patch } });
+  const meta = TYPE_META[phase.type];
+
+  const minutes = Math.floor(phase.duration / 60);
+  const seconds = phase.duration % 60;
 
   return (
-    <div
-      className="rounded-2xl border transition-all duration-200"
-      style={{ border: '1.5px solid rgba(120,113,108,0.15)', background: '#FAFAF9' }}
-    >
+    <div className="rounded-2xl border border-line/15 bg-bg overflow-hidden">
       {/* Header */}
-      <div
-        className="flex items-center gap-3 px-4 py-3 cursor-pointer"
-        onClick={() => setOpen(o => !o)}
-      >
-        <span className="text-xs text-stone-400 font-mono w-5 text-center">{index + 1}</span>
+      <div className="flex items-center gap-3 pl-3 pr-2 py-2.5">
+        <span className="w-9 h-9 rounded-xl bg-surface flex items-center justify-center text-muted flex-shrink-0">
+          <Icon name={meta.icon} size={18} />
+        </span>
         <div className="flex-1 min-w-0">
           <input
-            className="text-sm font-medium text-stone-700 bg-transparent border-none outline-none w-full placeholder-stone-300"
+            className="w-full bg-transparent text-sm font-medium text-ink2 outline-none placeholder:text-faint"
             value={phase.name}
             onChange={e => update({ name: e.target.value })}
-            onClick={e => e.stopPropagation()}
-            placeholder="Phase name"
+            placeholder={`Phase ${index + 1}`}
+            aria-label={`Phase ${index + 1} name`}
             id={`phase-name-${index}`}
           />
+          <p className="text-xs text-faint mt-0.5">{meta.label} · {formatDuration(phase.duration)}</p>
         </div>
-        <span className="text-xs text-stone-400">{formatDuration(phase.duration)}</span>
-        <span className="text-xs text-stone-400 px-2 py-0.5 rounded-full bg-stone-100">{phase.type}</span>
-        <span className="text-stone-300 ml-1">{open ? '▴' : '▾'}</span>
+        <IconButton
+          icon={open ? 'chevronUp' : 'chevronDown'}
+          label={open ? 'Collapse phase' : 'Edit phase'}
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          id={`phase-toggle-${index}`}
+        />
       </div>
 
       {open && (
-        <div className="px-4 pb-4 flex flex-col gap-4 border-t border-stone-100 animate-fade-in">
-          {/* Duration */}
-          <div className="flex items-center gap-3 pt-3">
-            <label className="text-xs text-stone-400 w-20">Duration</label>
-            <div className="flex gap-2 flex-1">
-              <div className="flex items-center gap-1">
-                <input
-                  type="number" min={0} max={120}
-                  className="w-14 text-sm text-stone-700 border border-stone-200 rounded-lg px-2 py-1 text-center outline-none focus:border-stone-400"
-                  value={Math.floor(phase.duration / 60)}
-                  onChange={e => update({ duration: Math.max(0, +e.target.value) * 60 + (phase.duration % 60) })}
-                  id={`phase-min-${index}`}
-                />
-                <span className="text-xs text-stone-400">min</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <input
-                  type="number" min={0} max={59}
-                  className="w-14 text-sm text-stone-700 border border-stone-200 rounded-lg px-2 py-1 text-center outline-none focus:border-stone-400"
-                  value={phase.duration % 60}
-                  onChange={e => update({ duration: Math.floor(phase.duration / 60) * 60 + Math.max(0, Math.min(59, +e.target.value)) })}
-                  id={`phase-sec-${index}`}
-                />
-                <span className="text-xs text-stone-400">sec</span>
-              </div>
-            </div>
+        <div className="px-4 pb-4 pt-1 flex flex-col gap-2 border-t border-line/10 animate-fade-in">
+          <div className="pt-3">
+            <Segmented
+              size="sm"
+              value={phase.type}
+              onChange={t => update({ type: t, breathing: t === 'breathing' ? breathing : phase.breathing })}
+              options={(Object.keys(TYPE_META) as PhaseType[]).map(t => ({ value: t, label: TYPE_META[t].label }))}
+            />
+            <p className="text-xs text-faint mt-2 px-1">{meta.hint}</p>
           </div>
 
-          {/* Type */}
-          <div className="flex items-center gap-3">
-            <label className="text-xs text-stone-400 w-20">Type</label>
-            <div className="flex gap-1.5 flex-1">
-              {TYPE_OPTIONS.map(t => (
-                <button
-                  key={t}
-                  id={`phase-type-${index}-${t}`}
-                  onClick={() => update({ type: t })}
-                  className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
-                  style={{
-                    background: phase.type === t ? '#44403C' : '#F5F5F4',
-                    color: phase.type === t ? '#FAFAF9' : '#78716C',
-                    border: 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
+          <Line label="Minutes">
+            <Stepper label="minutes" value={minutes} min={0} max={180}
+              onChange={m => update({ duration: Math.max(5, m * 60 + seconds) })} />
+          </Line>
+          <Line label="Seconds">
+            <Stepper label="seconds" value={seconds} min={0} max={55} step={5}
+              onChange={s => update({ duration: Math.max(5, minutes * 60 + s) })} />
+          </Line>
 
-          {/* Interval config */}
           {phase.type === 'interval' && (
-            <div className="flex items-center gap-3">
-              <label className="text-xs text-stone-400 w-20">Bell every</label>
-              <div className="flex items-center gap-1">
-                <input
-                  type="number" min={10}
-                  className="w-16 text-sm text-stone-700 border border-stone-200 rounded-lg px-2 py-1 text-center outline-none focus:border-stone-400"
-                  value={phase.intervalSeconds ?? 60}
-                  onChange={e => update({ intervalSeconds: Math.max(10, +e.target.value) })}
-                  id={`phase-interval-${index}`}
-                />
-                <span className="text-xs text-stone-400">sec</span>
-              </div>
-            </div>
+            <Line label="Bell every">
+              <Stepper label="bell interval" value={phase.intervalSeconds ?? 60} min={10} max={900} step={10}
+                format={v => (v >= 60 && v % 60 === 0 ? `${v / 60}m` : `${v}s`)}
+                onChange={v => update({ intervalSeconds: v })} />
+            </Line>
           )}
 
-          {/* Breathing config */}
           {phase.type === 'breathing' && (
-            <div className="flex flex-col gap-3 p-3 rounded-xl bg-stone-50">
-              {/* Pattern */}
-              <div className="flex items-center gap-3">
-                <label className="text-xs text-stone-400 w-20">Pattern</label>
-                <div className="flex gap-1.5">
-                  {(['square', 'triangle'] as const).map(p => (
-                    <button
-                      key={p}
-                      id={`pattern-${index}-${p}`}
-                      onClick={() => updateBreathing({ pattern: p })}
-                      className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
-                      style={{
-                        background: (phase.breathing?.pattern ?? 'square') === p ? '#44403C' : '#F5F5F4',
-                        color: (phase.breathing?.pattern ?? 'square') === p ? '#FAFAF9' : '#78716C',
-                        border: 'none', cursor: 'pointer',
-                      }}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Timing */}
-              {[
-                { key: 'inhale', label: 'Inhale' },
-                { key: 'hold', label: 'Hold' },
-                { key: 'exhale', label: 'Exhale' },
-                ...(phase.breathing?.pattern === 'square' ? [{ key: 'holdAfterExhale', label: 'Hold after' }] : []),
-              ].map(({ key, label }) => (
-                <div key={key} className="flex items-center gap-3">
-                  <label className="text-xs text-stone-400 w-20">{label}</label>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number" min={0} max={30}
-                      className="w-14 text-sm text-stone-700 border border-stone-200 rounded-lg px-2 py-1 text-center outline-none focus:border-stone-400"
-                      value={(phase.breathing as any)?.[key] ?? 4}
-                      onChange={e => updateBreathing({ [key]: Math.max(0, +e.target.value) })}
-                      id={`breath-${index}-${key}`}
-                    />
-                    <span className="text-xs text-stone-400">sec</span>
-                  </div>
-                </div>
-              ))}
+            <div className="mt-1 rounded-xl bg-surface p-3 flex flex-col gap-1">
+              <Segmented
+                size="sm"
+                value={breathing.pattern}
+                onChange={p => updateBreathing({ pattern: p })}
+                options={[{ value: 'square', label: 'Box (4 steps)' }, { value: 'triangle', label: 'Triangle (3 steps)' }]}
+                className="bg-bg mb-1"
+              />
+              <Line label="Breathe in">
+                <Stepper label="inhale" value={breathing.inhale} min={1} max={30} format={secs} onChange={v => updateBreathing({ inhale: v })} />
+              </Line>
+              <Line label="Hold">
+                <Stepper label="hold" value={breathing.hold} min={0} max={30} format={secs} onChange={v => updateBreathing({ hold: v })} />
+              </Line>
+              <Line label="Breathe out">
+                <Stepper label="exhale" value={breathing.exhale} min={1} max={30} format={secs} onChange={v => updateBreathing({ exhale: v })} />
+              </Line>
+              {breathing.pattern === 'square' && (
+                <Line label="Hold after">
+                  <Stepper label="hold after exhale" value={breathing.holdAfterExhale} min={0} max={30} format={secs}
+                    onChange={v => updateBreathing({ holdAfterExhale: v })} />
+                </Line>
+              )}
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex gap-2 pt-1">
-            <button onClick={onMoveUp} disabled={!onMoveUp} className="text-xs text-stone-400 hover:text-stone-600 disabled:opacity-30">↑</button>
-            <button onClick={onMoveDown} disabled={!onMoveDown} className="text-xs text-stone-400 hover:text-stone-600 disabled:opacity-30">↓</button>
-            <button
-              id={`phase-delete-${index}`}
-              onClick={onDelete}
-              className="ml-auto text-xs text-red-400 hover:text-red-600"
-            >
-              Remove
-            </button>
+          <div className="flex items-center gap-1 pt-2">
+            <IconButton icon="arrowUp" label="Move up" onClick={onMoveUp} disabled={!onMoveUp} />
+            <IconButton icon="arrowDown" label="Move down" onClick={onMoveDown} disabled={!onMoveDown} />
+            {onDelete && (
+              <button
+                id={`phase-delete-${index}`}
+                onClick={onDelete}
+                className="ml-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-medium text-danger hover:bg-danger/5"
+              >
+                <Icon name="trash" size={16} />
+                Remove
+              </button>
+            )}
           </div>
         </div>
       )}

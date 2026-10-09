@@ -1,0 +1,20 @@
+// Firestore rules needed by the Meditation app — snippet to MERGE, not deploy.
+//
+// The nistha-passi-core project is shared with other apps (ExpenseTracker,
+// ClearMyMind, Chttrix, …). Deploying this file alone would replace their
+// rules. Merge these changes into the project's full ruleset instead.
+//
+// 1. Add this block next to the existing "Nistha Meditation App" section
+//    (the existing /sessions rule there already covers the v1 history import):
+
+    match /meditation_users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+// 2. Exclude meditation_users from the "Other Apps" catch-all, otherwise any
+//    signed-in user could read every user's meditation data (rules are OR'd):
+//
+//    match /{collection}/{rest=**} {
+//      allow read, write: if request.auth != null
+//        && !(collection in ['users', 'meditation_users']);
+//    }

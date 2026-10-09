@@ -1,138 +1,116 @@
-import type { Phase, BreathStep } from '../types';
-import { soundEngine } from './SoundEngine';
+import type { Phase, BreathStep, BreathingConfig } from '../types';
 
-export interface PhaseManagerState {
+/**
+ * PhaseManager — derives the full session position from *absolute* elapsed time.
+ *
+ * Being a pure function of elapsed seconds makes it immune to dropped frames,
+ * throttled background tabs and locked screens: however large the gap between
+ * two ticks, the state is always exact. Cues (bells) are found by diffing two
+ * consecutive snapshots, so each cue fires at most once per tick.
+ */
+
+export interface BreathStepDef {
+  step: BreathStep;
+  duration: number;
+}
+
+export interface PhaseSnapshot {
   phaseIndex: number;
   phase: Phase;
   phaseElapsedSec: number;
+  phaseRemainingSec: number;
   breathStep: BreathStep | null;
+  breathStepIndex: number;
   breathStepElapsedSec: number;
+  breathStepDuration: number;
   breathCycle: number;
+  intervalCount: number;
   totalElapsedSec: number;
+  done: boolean;
 }
 
-type EventCallback = (state: PhaseManagerState) => void;
+export type Cue = 'phase' | 'breath' | 'interval';
 
-export class PhaseManager {
-  private phases: Phase[];
-  private phaseIndex = 0;
-  private phaseElapsed = 0;       // seconds accumulator
-  private breathStepElapsed = 0;  // seconds accumulator within a breath step
-  private breathCycle = 0;
-  private breathStepIndex = 0;    // index into breath steps array
-  private totalElapsed = 0;       // seconds
+export const getBreathSteps = (bp: BreathingConfig | undefined): BreathStepDef[] => {
+  if (!bp) return [];
+  const steps: BreathStepDef[] = [
+    { step: 'inhale', duration: bp.inhale },
+    { step: 'hold', duration: bp.hold },
+    { step: 'exhale', duration: bp.exhale },
+  ];
+  if (bp.pattern === 'square') steps.push({ step: 'holdAfterExhale', duration: bp.holdAfterExhale });
+  return steps.filter(s => s.duration > 0);
+};
 
-  private lastIntervalBell = 0;   // seconds since last interval bell
+export const totalDurationOf = (phases: Phase[]) =>
+  phases.reduce((sum, p) => sum + Math.max(0, p.duration), 0);
 
-  private onUpdate: EventCallback;
+export function snapshotAt(phases: Phase[], elapsedSec: number): PhaseSnapshot {
+  const total = totalDurationOf(phases);
+  const t = Math.max(0, Math.min(elapsedSec, total));
 
-  constructor(phases: Phase[], onUpdate: EventCallback) {
-    if (phases.length === 0) throw new Error('Phases cannot be empty');
-    this.phases = phases;
-    this.onUpdate = onUpdate;
+  // Locate the phase
+  let phaseIndex = 0;
+  let phaseStart = 0;
+  while (phaseIndex < phases.length - 1 && t >= phaseStart + phases[phaseIndex].duration) {
+    phaseStart += phases[phaseIndex].duration;
+    phaseIndex++;
   }
+  const phase = phases[phaseIndex];
+  const phaseElapsedSec = t - phaseStart;
 
-  get currentPhase(): Phase {
-    return this.phases[this.phaseIndex];
-  }
-
-  private getBreathSteps(): { step: BreathStep; duration: number }[] {
-    const bp = this.currentPhase.breathing;
-    if (!bp) return [];
-    if (bp.pattern === 'square') {
-      return [
-        { step: 'inhale' as BreathStep, duration: bp.inhale },
-        { step: 'hold' as BreathStep, duration: bp.hold },
-        { step: 'exhale' as BreathStep, duration: bp.exhale },
-        { step: 'holdAfterExhale' as BreathStep, duration: bp.holdAfterExhale },
-      ].filter(s => s.duration > 0);
-    } else {
-      return [
-        { step: 'inhale' as BreathStep, duration: bp.inhale },
-        { step: 'hold' as BreathStep, duration: bp.hold },
-        { step: 'exhale' as BreathStep, duration: bp.exhale },
-      ].filter(s => s.duration > 0);
-    }
-  }
-
-  /** Called every animation frame with delta in seconds */
-  tick(deltaSec: number) {
-    this.totalElapsed += deltaSec;
-    this.phaseElapsed += deltaSec;
-    this.breathStepElapsed += deltaSec;
-
-    const phase = this.currentPhase;
-
-    // --- Advance breath step ---
-    if (phase.type === 'breathing' && phase.breathing) {
-      const steps = this.getBreathSteps();
-      if (steps.length > 0) {
-        const currentStep = steps[this.breathStepIndex];
-        if (this.breathStepElapsed >= currentStep.duration) {
-          this.breathStepElapsed -= currentStep.duration;
-          // Advance to next step
-          this.breathStepIndex = (this.breathStepIndex + 1) % steps.length;
-          if (this.breathStepIndex === 0) this.breathCycle++;
-          // Bell on each breath step change
-          soundEngine.playBell();
+  // Locate the breath step within the phase
+  let breathStep: BreathStep | null = null;
+  let breathStepIndex = 0;
+  let breathStepElapsedSec = 0;
+  let breathStepDuration = 0;
+  let breathCycle = 0;
+  if (phase.type === 'breathing') {
+    const steps = getBreathSteps(phase.breathing);
+    const cycleLen = steps.reduce((s, x) => s + x.duration, 0);
+    if (cycleLen > 0) {
+      breathCycle = Math.floor(phaseElapsedSec / cycleLen);
+      let within = phaseElapsedSec - breathCycle * cycleLen;
+      for (let i = 0; i < steps.length; i++) {
+        if (within < steps[i].duration || i === steps.length - 1) {
+          breathStepIndex = i;
+          breathStep = steps[i].step;
+          breathStepElapsedSec = within;
+          breathStepDuration = steps[i].duration;
+          break;
         }
+        within -= steps[i].duration;
       }
     }
-
-    // --- Interval bell ---
-    if (phase.type === 'interval') {
-      const interval = phase.intervalSeconds ?? 60;
-      if (this.phaseElapsed - this.lastIntervalBell >= interval) {
-        soundEngine.playBell();
-        this.lastIntervalBell = this.phaseElapsed;
-      }
-    }
-
-    // --- Phase transition ---
-    if (this.phaseElapsed >= phase.duration) {
-      const isLast = this.phaseIndex === this.phases.length - 1;
-      if (isLast) {
-        // Session complete — handled by TimerEngine onComplete
-        this.emitState();
-        return;
-      } else {
-        // Double bell for phase end
-        soundEngine.playDoubleBell();
-        this.phaseIndex++;
-        this.phaseElapsed = 0;
-        this.breathStepElapsed = 0;
-        this.breathStepIndex = 0;
-        this.breathCycle = 0;
-        this.lastIntervalBell = 0;
-      }
-    }
-
-    this.emitState();
   }
 
-  private emitState() {
-    const phase = this.currentPhase;
-    const steps = phase.type === 'breathing' ? this.getBreathSteps() : [];
-    const breathStep = steps.length > 0 ? steps[this.breathStepIndex].step : null;
+  const interval = Math.max(10, phase.intervalSeconds ?? 60);
+  const intervalCount = phase.type === 'interval' ? Math.floor(phaseElapsedSec / interval) : 0;
 
-    this.onUpdate({
-      phaseIndex: this.phaseIndex,
-      phase,
-      phaseElapsedSec: this.phaseElapsed,
-      breathStep,
-      breathStepElapsedSec: this.breathStepElapsed,
-      breathCycle: this.breathCycle,
-      totalElapsedSec: this.totalElapsed,
-    });
-  }
+  return {
+    phaseIndex,
+    phase,
+    phaseElapsedSec,
+    phaseRemainingSec: Math.max(0, phase.duration - phaseElapsedSec),
+    breathStep,
+    breathStepIndex,
+    breathStepElapsedSec,
+    breathStepDuration,
+    breathCycle,
+    intervalCount,
+    totalElapsedSec: t,
+    done: total > 0 && elapsedSec >= total,
+  };
+}
 
-  reset() {
-    this.phaseIndex = 0;
-    this.phaseElapsed = 0;
-    this.breathStepElapsed = 0;
-    this.breathStepIndex = 0;
-    this.breathCycle = 0;
-    this.totalElapsed = 0;
-    this.lastIntervalBell = 0;
+/** Which cues should sound when moving from `prev` to `next`. */
+export function cuesBetween(prev: PhaseSnapshot | null, next: PhaseSnapshot): Cue[] {
+  if (!prev || next.done) return [];
+  if (next.phaseIndex !== prev.phaseIndex) return ['phase'];
+  const cues: Cue[] = [];
+  if (next.breathStep && (next.breathStepIndex !== prev.breathStepIndex || next.breathCycle !== prev.breathCycle)) {
+    cues.push('breath');
   }
+  if (next.intervalCount > prev.intervalCount) cues.push('interval');
+  return cues;
 }

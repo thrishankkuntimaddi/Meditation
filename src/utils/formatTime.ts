@@ -1,23 +1,23 @@
 export const formatTime = (totalSeconds: number): string => {
-  const s = Math.max(0, Math.floor(totalSeconds));
-  const m = Math.floor(s / 60);
+  const s = Math.max(0, Math.ceil(totalSeconds - 0.001));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(sec).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 };
 
 export const formatDuration = (totalSeconds: number): string => {
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
+  const total = Math.round(totalSeconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
   if (m === 0) return `${s}s`;
-  if (s === 0) return `${m}m`;
+  if (s === 0) return `${m} min`;
   return `${m}m ${s}s`;
 };
 
-export const formatDate = (timestamp: number): string => {
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-  }).format(new Date(timestamp));
-};
-
-export const msToSeconds = (ms: number): number => ms / 1000;
-export const secondsToMs = (s: number): number => s * 1000;
+export const formatClock = (timestamp: number): string =>
+  new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit' }).format(new Date(timestamp));

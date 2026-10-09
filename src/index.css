@@ -1,10 +1,41 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Base ─────────────────────────────────────────────────────── */
+/* ─── Design tokens — warm stone palette ───────────────────────────── */
+:root {
+  --c-bg: 250 250 249;        /* stone-50  */
+  --c-surface: 245 245 244;   /* stone-100 */
+  --c-surface-2: 231 229 228; /* stone-200 */
+  --c-ink: 28 25 23;          /* stone-900 */
+  --c-ink-2: 68 64 60;        /* stone-700 */
+  --c-muted: 120 113 108;     /* stone-500 */
+  --c-faint: 168 162 158;     /* stone-400 */
+  --c-line: 120 113 108;      /* used with alpha */
+  --c-danger: 185 28 28;
+  --c-ok: 74 141 98;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-bg: 20 18 17;
+    --c-surface: 32 29 27;
+    --c-surface-2: 48 44 41;
+    --c-ink: 245 245 244;
+    --c-ink-2: 214 211 209;
+    --c-muted: 168 162 158;
+    --c-faint: 120 113 108;
+    --c-line: 214 211 209;
+    --c-danger: 248 113 113;
+    --c-ok: 134 197 152;
+    color-scheme: dark;
+  }
+}
+
+/* ─── Base ─────────────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
@@ -14,20 +45,15 @@ html {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  scroll-behavior: smooth;
 }
 
-body {
-  margin: 0;
-  background: #FAFAF9;
-  color: #1C1917;
-  overscroll-behavior: none;
-}
-
-/* Prevent rubber-band overscroll on iOS */
 html, body {
   height: 100%;
+  margin: 0;
   overflow: hidden;
+  background: rgb(var(--c-bg));
+  color: rgb(var(--c-ink));
+  overscroll-behavior: none;
 }
 
 #root {
@@ -36,54 +62,55 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 
-/* ─── Scrollbar ─────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 0; background: transparent; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { cursor: default; }
+input { font: inherit; color: inherit; }
 
-/* ─── Keyframes ──────────────────────────────────────────────────── */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
+::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
 
-@keyframes slideUp {
-  from { transform: translateY(14px); opacity: 0; }
-  to   { transform: translateY(0);    opacity: 1; }
-}
-
-@keyframes pulseRing {
-  0%, 100% { transform: scale(1);    opacity: 0.35; }
-  50%       { transform: scale(1.06); opacity: 0.12; }
-}
-
-@keyframes breatheIn {
-  from { transform: scale(1);    opacity: 0.65; }
-  to   { transform: scale(1.35); opacity: 1;    }
-}
-
-@keyframes breatheOut {
-  from { transform: scale(1.35); opacity: 1;    }
-  to   { transform: scale(1);    opacity: 0.65; }
-}
-
-/* ─── Utility classes ────────────────────────────────────────────── */
-.animate-fade-in  { animation: fadeIn  0.4s ease-out forwards; }
-.animate-slide-up { animation: slideUp 0.35s ease-out forwards; }
-.animate-pulse-ring { animation: pulseRing 2.2s ease-in-out infinite; }
-
-/* ─── Input resets ───────────────────────────────────────────────── */
 input[type='number']::-webkit-inner-spin-button,
-input[type='number']::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
+input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type='number'] { -moz-appearance: textfield; }
 
-/* ─── Focus visible ──────────────────────────────────────────────── */
-button:focus-visible, input:focus-visible {
-  outline: 2px solid #78716C;
+button:focus-visible, input:focus-visible, [role='switch']:focus-visible {
+  outline: 2px solid rgb(var(--c-muted));
   outline-offset: 2px;
 }
 
-/* ─── Safe area insets (PWA / notch phones) ──────────────────────── */
-.pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
-.pt-safe { padding-top:    env(safe-area-inset-top,    16px); }
+/* Range slider (volume) */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  width: 100%;
+  height: 28px;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(to right, rgb(var(--c-ink-2)) var(--fill, 50%), rgb(var(--c-line) / 0.2) var(--fill, 50%));
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px; height: 20px; margin-top: -8px;
+  border-radius: 50%;
+  background: rgb(var(--c-bg));
+  border: 1.5px solid rgb(var(--c-line) / 0.35);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.12);
+}
+input[type='range']::-moz-range-track { height: 4px; border-radius: 4px; background: rgb(var(--c-line) / 0.2); }
+input[type='range']::-moz-range-progress { height: 4px; border-radius: 4px; background: rgb(var(--c-ink-2)); }
+input[type='range']::-moz-range-thumb {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: rgb(var(--c-bg)); border: 1.5px solid rgb(var(--c-line) / 0.35);
+}
+
+/* ─── Safe areas (notch phones, Android edge-to-edge) ──────────────── */
+.pt-safe { padding-top: max(env(safe-area-inset-top), 0px); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.screen-top { padding-top: calc(env(safe-area-inset-top, 0px) + 48px); }
+.nav-space { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

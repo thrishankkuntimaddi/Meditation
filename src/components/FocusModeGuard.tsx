@@ -1,214 +1,116 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import Icon, { type IconName } from './ui/Icon';
+import { native, platform, type FocusCapabilities } from '../native';
+import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../hooks/useStore';
 
 interface Props {
-  /** Called once the user taps "I'm ready" or after auto-dismiss */
   onDismiss: () => void;
 }
 
+const AUTO_DISMISS_S = 8;
+
 /**
- * FocusModeGuard
- * ─────────────────────────────────────────────────────────
- * Shown once per session start. Instructs the user to:
- *   • Put their phone/laptop on silent mode
- *   • Turn on Do Not Disturb
- *   • Close other apps / tabs
- *
- * Auto-dismisses after 8 s so it never blocks the session.
- * Uses localStorage to remember "seen this session" so it
- * only appears on the first start (resets when session ends).
+ * Shown when a session starts. Tells the user exactly what focus mode is doing
+ * on *this* platform, and what they still need to do themselves.
  */
 const FocusModeGuard: React.FC<Props> = ({ onDismiss }) => {
-  const [visible, setVisible] = useState(true);
-  const [countdown, setCountdown] = useState(8);
+  const { user } = useAuth();
+  const settings = useSettings();
+  const [caps, setCaps] = useState<FocusCapabilities | null>(null);
+  const [left, setLeft] = useState(AUTO_DISMISS_S);
   const [exiting, setExiting] = useState(false);
+  const dismissedRef = useRef(false);
 
-  const dismiss = () => {
+  const dismiss = React.useCallback(() => {
+    if (dismissedRef.current) return;
+    dismissedRef.current = true;
     setExiting(true);
-    setTimeout(() => {
-      setVisible(false);
-      onDismiss();
-    }, 500);
-  };
+    setTimeout(onDismiss, 300);
+  }, [onDismiss]);
 
-  // Auto countdown
+  useEffect(() => { native.capabilities().then(setCaps); }, []);
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          dismiss();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const id = setInterval(() => setLeft(l => Math.max(0, l - 1)), 1000);
+    return () => clearInterval(id);
   }, []);
 
-  if (!visible) return null;
+  useEffect(() => { if (left === 0) dismiss(); }, [left, dismiss]);
+
+  const items: { icon: IconName; text: string; done: boolean; action?: React.ReactNode }[] = [
+    { icon: 'sun', text: 'Screen will stay awake', done: true },
+    {
+      icon: 'devices',
+      text: user
+        ? settings.silenceOtherDevices ? 'Your other open devices go silent' : 'Silencing other devices is off'
+        : 'Sign in to silence your other devices',
+      done: !!user && settings.silenceOtherDevices,
+    },
+  ];
+
+  if (caps?.systemDnd === 'granted' && settings.systemDnd && platform === 'android') {
+    items.push({ icon: 'bellOff', text: 'Do Not Disturb is on', done: true });
+  } else if (caps?.systemDnd === 'needs-permission' && settings.systemDnd) {
+    items.push({
+      icon: 'bellOff',
+      text: 'Allow Do Not Disturb access',
+      done: false,
+      action: (
+        <button
+          className="text-xs font-medium underline underline-offset-2 text-white/80"
+          onClick={() => { setLeft(AUTO_DISMISS_S + 20); native.requestDndPermission(); }}
+        >
+          Allow
+        </button>
+      ),
+    });
+  } else {
+    items.push({ icon: 'bellOff', text: 'Turn on Do Not Disturb / Silent', done: false });
+  }
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 9999,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-        background: 'rgba(28,25,23,0.82)',
-        backdropFilter: 'blur(18px)',
-        WebkitBackdropFilter: 'blur(18px)',
-        transition: 'opacity 0.5s ease',
-        opacity: exiting ? 0 : 1,
-      }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-6 transition-opacity duration-300"
+      style={{ background: 'rgb(28 25 23 / 0.86)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', opacity: exiting ? 0 : 1 }}
     >
       <div
-        style={{
-          background: 'rgba(250,250,249,0.06)',
-          border: '1px solid rgba(250,250,249,0.12)',
-          borderRadius: '28px',
-          padding: '36px 28px',
-          maxWidth: '340px',
-          width: '100%',
-          textAlign: 'center',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '20px',
-          boxShadow: '0 32px 80px rgba(0,0,0,0.4)',
-          transform: exiting ? 'scale(0.94)' : 'scale(1)',
-          transition: 'transform 0.5s ease',
-        }}
+        className="w-full max-w-[340px] rounded-[28px] px-7 py-8 flex flex-col items-center gap-5 text-center transition-transform duration-300"
+        style={{ background: 'rgb(250 250 249 / 0.06)', border: '1px solid rgb(250 250 249 / 0.12)', transform: exiting ? 'scale(0.96)' : 'scale(1)' }}
       >
-        {/* Icon */}
-        <div style={{ fontSize: 48, lineHeight: 1 }}>🌙</div>
-
-        {/* Heading */}
+        <span className="w-14 h-14 rounded-full flex items-center justify-center text-white/90" style={{ background: 'rgb(250 250 249 / 0.08)' }}>
+          <Icon name="focus" size={28} />
+        </span>
         <div>
-          <p
-            style={{
-              color: '#FAFAF9',
-              fontSize: '18px',
-              fontWeight: 500,
-              letterSpacing: '0.02em',
-              margin: 0,
-              marginBottom: '6px',
-            }}
-          >
-            Focus Mode On
-          </p>
-          <p
-            style={{
-              color: 'rgba(250,250,249,0.45)',
-              fontSize: '12px',
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-              margin: 0,
-            }}
-          >
-            Blocking all distractions
-          </p>
+          <p className="text-lg font-medium text-white/95">Focus mode on</p>
+          <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-white/45">Nothing will disturb this session</p>
         </div>
 
-        {/* Steps */}
-        <div
-          style={{
-            width: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px',
-          }}
-        >
-          {[
-            { icon: '🔕', label: 'Turn on Silent / Do Not Disturb' },
-            { icon: '📵', label: 'Close other apps & notifications' },
-            { icon: '💻', label: 'Browser notifications are suppressed' },
-            { icon: '🔆', label: 'Screen will stay awake' },
-          ].map(({ icon, label }) => (
-            <div
-              key={label}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                background: 'rgba(250,250,249,0.06)',
-                borderRadius: '14px',
-                padding: '12px 16px',
-                textAlign: 'left',
-              }}
-            >
-              <span style={{ fontSize: 20, flexShrink: 0 }}>{icon}</span>
-              <span
-                style={{
-                  color: 'rgba(250,250,249,0.75)',
-                  fontSize: '13px',
-                  lineHeight: 1.4,
-                }}
-              >
-                {label}
-              </span>
-            </div>
+        <ul className="w-full flex flex-col gap-2">
+          {items.map(it => (
+            <li key={it.text} className="flex items-center gap-3 rounded-2xl px-4 py-3 text-left" style={{ background: 'rgb(250 250 249 / 0.06)' }}>
+              <Icon name={it.icon} size={18} className="text-white/70 flex-shrink-0" />
+              <span className="flex-1 text-[13px] leading-snug text-white/80">{it.text}</span>
+              {it.action ?? (
+                it.done
+                  ? <Icon name="check" size={16} className="text-white/70" />
+                  : <span className="w-1.5 h-1.5 rounded-full bg-white/40" />
+              )}
+            </li>
           ))}
-        </div>
+        </ul>
 
-        {/* CTA button */}
         <button
           id="focus-mode-ready-btn"
           onClick={dismiss}
-          style={{
-            width: '100%',
-            padding: '14px',
-            borderRadius: '16px',
-            border: 'none',
-            background: 'rgba(250,250,249,0.12)',
-            color: '#FAFAF9',
-            fontSize: '14px',
-            fontWeight: 500,
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            cursor: 'pointer',
-            transition: 'background 0.2s',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-          }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(250,250,249,0.2)')}
-          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(250,250,249,0.12)')}
+          className="w-full h-12 rounded-2xl text-sm font-medium uppercase tracking-[0.12em] text-white flex items-center justify-center gap-2 transition-colors"
+          style={{ background: 'rgb(250 250 249 / 0.12)' }}
         >
-          <span>I'm Ready</span>
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 22,
-              height: 22,
-              borderRadius: '50%',
-              background: 'rgba(250,250,249,0.15)',
-              fontSize: '11px',
-              fontWeight: 700,
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {countdown}
+          I'm ready
+          <span className="w-6 h-6 rounded-full text-[11px] font-semibold tabular-nums flex items-center justify-center" style={{ background: 'rgb(250 250 249 / 0.15)' }}>
+            {left}
           </span>
         </button>
-
-        {/* Sub note */}
-        <p
-          style={{
-            color: 'rgba(250,250,249,0.25)',
-            fontSize: '11px',
-            margin: 0,
-            letterSpacing: '0.04em',
-          }}
-        >
-          Auto-continues in {countdown}s
-        </p>
       </div>
     </div>
   );

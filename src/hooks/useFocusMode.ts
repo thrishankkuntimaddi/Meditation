@@ -1,110 +1,81 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { native } from '../native';
+import { soundEngine } from '../engines/SoundEngine';
+import { isFocusLive, remoteFocus, type FocusState } from '../lib/focusSync';
+import { store } from '../lib/store';
+
+const MEDITATING_TITLE = 'Meditating · Meditation';
 
 /**
- * useFocusMode
- * ─────────────────────────────────────────────────────────
- * When active = true this hook:
- *  1. Requests a Screen Wake Lock  → keeps screen on (mobile + laptop)
- *  2. Suppresses browser Notifications by re-closing them immediately
- *  3. Prevents the browser tab title from flickering (clears any title
- *     updates triggered by other libraries / background scripts)
- *  4. On visibility change (tab hidden): pushes a gentle reminder back
- *     so the user doesn't get distracted in another tab
- *  5. Overrides `document.title` to "🧘 Meditating…" so OS notification
- *     previews / tab-switchers show the right context
- *
- * IMPORTANT — what the Web can & cannot do:
- *  • OS-level "silent mode" (ringer volume) can NOT be set by a browser.
- *    The hook shows a one-time prompt overlay instead (handled in UI layer).
- *  • Notification permission must already be granted OR denied; we don't
- *    request it here to avoid interrupting the experience.
- * ─────────────────────────────────────────────────────────
+ * Focus for the device that is meditating:
+ *  - Screen Wake Lock (web) / keep-awake (native) so the screen never sleeps
+ *  - System Do Not Disturb where the platform allows it (Android, macOS Shortcuts)
+ *  - Tab title shows the session so other windows and switchers reflect it
  */
 export function useFocusMode(active: boolean) {
-  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-  const originalTitleRef = useRef(document.title);
-  // ── 1. Screen Wake Lock ──────────────────────────────────
-  const acquireWakeLock = useCallback(async () => {
-    if (!('wakeLock' in navigator)) return;
-    try {
-      wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-    } catch {
-      // User denied or browser doesn't support — silently skip
-    }
-  }, []);
-
-  const releaseWakeLock = useCallback(() => {
-    wakeLockRef.current?.release().catch(() => {});
-    wakeLockRef.current = null;
-  }, []);
-
-  // Re-acquire wake lock when page becomes visible again (iOS/Android
-  // releases it automatically when the page is hidden)
   useEffect(() => {
     if (!active) return;
+    let wakeLock: WakeLockSentinel | null = null;
+    let cancelled = false;
+    const { systemDnd } = store.getState().settings;
 
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        await acquireWakeLock();
-        // Restore the meditation title if something else changed it
-        document.title = '🧘 Meditating…';
-      }
+    const acquire = async () => {
+      if (!('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+      try {
+        const lock = await navigator.wakeLock.request('screen');
+        if (cancelled) lock.release().catch(() => {});
+        else wakeLock = lock;
+      } catch { /* denied or unsupported */ }
     };
+    const onVisible = () => { if (document.visibilityState === 'visible') acquire(); };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [active, acquireWakeLock]);
-
-  // ── 2. Suppress Notification popups (Web Notifications API) ──
-  // We intercept the Notification constructor so any library that tries
-  // to fire a notification during the session closes it immediately.
-  const patchNotifications = useCallback(() => {
-    if (!('Notification' in window)) return;
-    const OrigNotif = window.Notification;
-
-    // @ts-ignore — intentionally patching the constructor
-    window.Notification = function (title: string, options?: NotificationOptions) {
-      const n = new OrigNotif(title, options);
-      n.close(); // immediately close any notification that tries to pop
-      return n;
-    };
-    // Preserve static members
-    Object.assign(window.Notification, OrigNotif);
-    (window.Notification as any).__original__ = OrigNotif;
-  }, []);
-
-  const restoreNotifications = useCallback(() => {
-    const orig = (window.Notification as any)?.__original__;
-    if (orig) window.Notification = orig;
-  }, []);
-
-  // ── 3. Title override ────────────────────────────────────
-  const setMeditationTitle = useCallback(() => {
-    originalTitleRef.current = document.title;
-    document.title = '🧘 Meditating…';
-  }, []);
-
-  const restoreTitle = useCallback(() => {
-    document.title = originalTitleRef.current;
-  }, []);
-
-  // ── Master toggle ────────────────────────────────────────
-  useEffect(() => {
-    if (active) {
-      acquireWakeLock();
-      setMeditationTitle();
-      patchNotifications();
-    } else {
-      releaseWakeLock();
-      restoreTitle();
-      restoreNotifications();
-    }
+    const originalTitle = document.title;
+    document.title = MEDITATING_TITLE;
+    acquire();
+    native.enterFocus('self', systemDnd);
+    document.addEventListener('visibilitychange', onVisible);
 
     return () => {
-      releaseWakeLock();
-      restoreTitle();
-      restoreNotifications();
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      wakeLock?.release().catch(() => {});
+      document.title = originalTitle;
+      native.exitFocus('self', systemDnd);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
+}
+
+/**
+ * Focus for every *other* open instance while one device meditates:
+ * silences all app audio and asks the native shell to mute / enable DND.
+ * Returns the live remote focus state (or null).
+ */
+export function useListenerFocus(): FocusState | null {
+  const remote = useSyncExternalStore(remoteFocus.subscribe, remoteFocus.get);
+  const [now, setNow] = useState(() => Date.now());
+
+  // Re-evaluate when the remote session is due to end, so we release on time
+  // even if the meditating device never sends its "ended" update.
+  useEffect(() => {
+    if (!remote) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [remote]);
+
+  const live = isFocusLive(remote, now) ? remote : null;
+  const isLive = live !== null;
+
+  useEffect(() => {
+    if (!isLive) return;
+    const { silenceOtherDevices, systemDnd } = store.getState().settings;
+    if (!silenceOtherDevices) return;
+    soundEngine.setSilenced(true);
+    native.enterFocus('listener', systemDnd);
+    return () => {
+      soundEngine.setSilenced(false);
+      native.exitFocus('listener', systemDnd);
+    };
+  }, [isLive]);
+
+  return live;
 }

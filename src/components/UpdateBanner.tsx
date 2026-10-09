@@ -1,90 +1,23 @@
 import React, { useState } from 'react';
+import Icon from './ui/Icon';
 
-interface Props {
-  onUpdate: () => void;
-}
-
-const UpdateBanner: React.FC<Props> = ({ onUpdate }) => {
+const UpdateBanner: React.FC<{ onUpdate: () => void }> = ({ onUpdate }) => {
   const [loading, setLoading] = useState(false);
-
-  const handleUpdate = () => {
-    setLoading(true);
-    onUpdate();
-    // Give SW time to activate before reload triggers
-    setTimeout(() => setLoading(false), 3000);
-  };
-
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 16,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 9999,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        background: '#1C1917',
-        color: '#FAFAF9',
-        borderRadius: 100,
-        padding: '10px 16px 10px 14px',
-        boxShadow: '0 8px 32px rgba(28,25,23,0.28)',
-        fontSize: 13,
-        fontWeight: 500,
-        whiteSpace: 'nowrap',
-        animation: 'slideDownFade 0.35s ease-out forwards',
-        border: '1px solid rgba(250,250,249,0.08)',
-      }}
-    >
-      {/* Pulse dot */}
-      <span
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          background: '#86EFAC',
-          flexShrink: 0,
-          boxShadow: '0 0 6px rgba(134,239,172,0.6)',
-          animation: 'pulse 2s ease-in-out infinite',
-          display: 'inline-block',
-        }}
-      />
-      <span style={{ color: 'rgba(250,250,249,0.7)', fontSize: 12 }}>
-        New version available
-      </span>
-      <button
-        id="update-app-btn"
-        onClick={handleUpdate}
-        disabled={loading}
-        style={{
-          background: '#FAFAF9',
-          color: '#1C1917',
-          border: 'none',
-          borderRadius: 100,
-          padding: '5px 14px',
-          fontSize: 12,
-          fontWeight: 600,
-          cursor: loading ? 'default' : 'pointer',
-          letterSpacing: '0.04em',
-          opacity: loading ? 0.6 : 1,
-          transition: 'opacity 0.2s',
-          flexShrink: 0,
-        }}
-      >
-        {loading ? 'Updating…' : 'Update'}
-      </button>
-
-      <style>{`
-        @keyframes slideDownFade {
-          from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
-          to   { opacity: 1; transform: translateX(-50%) translateY(0); }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-      `}</style>
+    <div className="fixed left-1/2 -translate-x-1/2 z-[90] animate-slide-up" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}>
+      <div className="flex items-center gap-3 rounded-full bg-ink text-bg pl-4 pr-1.5 py-1.5 shadow-xl whitespace-nowrap">
+        <span className="w-2 h-2 rounded-full bg-ok" />
+        <span className="text-xs opacity-75">New version available</span>
+        <button
+          id="update-app-btn"
+          onClick={() => { setLoading(true); onUpdate(); }}
+          disabled={loading}
+          className="h-8 px-3.5 rounded-full bg-bg text-ink text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-60"
+        >
+          <Icon name="refresh" size={14} />
+          {loading ? 'Updating…' : 'Update'}
+        </button>
+      </div>
     </div>
   );
 };

@@ -1,178 +1,165 @@
 import React, { useEffect, useState } from 'react';
-import type { Preset } from '../types';
 import type { SessionData } from '../hooks/useSession';
+import { RECORD_THRESHOLD } from '../hooks/useSession';
 import BreathingCircle from '../components/BreathingCircle';
 import CountdownOverlay from '../components/CountdownOverlay';
 import FocusModeGuard from '../components/FocusModeGuard';
 import { useFocusMode } from '../hooks/useFocusMode';
-import { formatTime } from '../utils/formatTime';
+import { useSettings } from '../hooks/useStore';
+import { formatDuration, formatTime } from '../utils/formatTime';
+import { Button, HoldButton, Icon, IconButton } from '../components/ui';
 
 interface Props {
-  preset: Preset;
-  sessionData: SessionData;
+  session: SessionData;
   onPause: () => void;
   onResume: () => void;
-  onEnd: () => void;
+  onEnd: () => boolean;   // returns whether the session was recorded
+  onClose: () => void;
 }
 
-const SessionScreen: React.FC<Props> = ({ preset, sessionData, onPause, onResume, onEnd }) => {
-  const { status, countdown, elapsed, remaining, total, phaseState } = sessionData;
+const SessionScreen: React.FC<Props> = ({ session, onPause, onResume, onEnd, onClose }) => {
+  const { status, countdown, elapsed, remaining, total, snapshot, preset } = session;
+  const settings = useSettings();
   const [eyesClosed, setEyesClosed] = useState(false);
-  // Show the focus-mode guard once per session start
-  const [showGuard, setShowGuard] = useState(true);
+  const [guardDismissed, setGuardDismissed] = useState(!settings.showFocusGuard);
+  const [endedEarly, setEndedEarly] = useState<{ recorded: boolean; elapsed: number } | null>(null);
 
-  // Activate focus mode (wake lock, notification suppression, title override)
-  // as soon as the countdown begins and keep it on until session ends.
-  const isActive = status === 'countdown' || status === 'running' || status === 'paused';
+  const isActive = (status === 'countdown' || status === 'running' || status === 'paused') && !endedEarly;
   useFocusMode(isActive);
 
-  // Reset guard so it shows again on a fresh session
+  // Space bar pauses / resumes on desktop
   useEffect(() => {
-    if (status === 'countdown') setShowGuard(true);
-  }, [status]);
-
-  const progress = total > 0 ? elapsed / total : 0;
-  const circumference = 2 * Math.PI * 54;
-
-  const phase = phaseState?.phase ?? null;
-  const breathStep = phaseState?.breathStep ?? null;
-  const stepElapsed = phaseState?.breathStepElapsedSec ?? 0;
-  const stepDuration = (() => {
-    if (!phase?.breathing || !breathStep) return 0;
-    const bp = phase.breathing;
-    const map: Record<string, number> = {
-      inhale: bp.inhale, hold: bp.hold,
-      exhale: bp.exhale, holdAfterExhale: bp.holdAfterExhale,
+    if (!isActive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || (e.target as HTMLElement)?.tagName === 'INPUT') return;
+      e.preventDefault();
+      if (status === 'running') onPause();
+      else if (status === 'paused') onResume();
     };
-    return map[breathStep] ?? 0;
-  })();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isActive, status, onPause, onResume]);
 
-  if (status === 'complete') {
+  if (!preset) return null;
+
+  // ── Summary (completed or ended early) ──
+  if (status === 'complete' || endedEarly) {
+    const done = status === 'complete';
+    const practised = done ? total : endedEarly!.elapsed;
+    const recorded = done ? session.recorded : endedEarly!.recorded;
     return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center bg-stone-50 animate-fade-in">
-        <div className="flex flex-col items-center gap-4">
-          <span className="text-4xl">✦</span>
-          <h2 className="text-2xl font-light text-stone-700">Complete</h2>
-          <p className="text-stone-400 text-sm">{Math.round(elapsed / 60)} minutes of stillness</p>
-          <button
-            id="session-done-btn"
-            onClick={onEnd}
-            className="mt-6 px-8 py-3 rounded-2xl text-sm font-medium"
-            style={{ background: '#1C1917', color: '#FAFAF9', border: 'none', cursor: 'pointer', letterSpacing: '0.1em' }}
-          >
-            DONE
-          </button>
-        </div>
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-bg px-8 animate-fade-in">
+        <span className="w-20 h-20 rounded-full bg-surface border border-line/15 flex items-center justify-center text-ink2">
+          <Icon name={done ? 'check' : 'leaf'} size={34} strokeWidth={1.4} />
+        </span>
+        <p className="mt-8 text-[11px] font-medium uppercase tracking-eyebrow text-faint">{preset.name}</p>
+        <h1 className="mt-2 text-3xl font-light text-ink2">{done ? 'Session complete' : 'Session ended'}</h1>
+        <p className="mt-3 text-sm text-muted">{formatDuration(Math.max(1, Math.round(practised)))} of stillness</p>
+        <p className="mt-6 max-w-[280px] text-center text-xs text-faint leading-relaxed">
+          {recorded
+            ? 'Added to your journey.'
+            : `Sessions ended before ${Math.round(RECORD_THRESHOLD * 100)}% aren't recorded.`}
+        </p>
+        <Button id="session-done-btn" variant="primary" size="lg" className="mt-10 w-full max-w-[280px]" onClick={onClose}>
+          DONE
+        </Button>
       </div>
     );
   }
 
+  const phase = snapshot?.phase ?? preset.phases[0];
+  const phaseIndex = snapshot?.phaseIndex ?? 0;
+  const progress = total > 0 ? elapsed / total : 0;
+
+  const handleEnd = () => {
+    const recorded = onEnd();
+    setEndedEarly({ recorded, elapsed });
+  };
+
   return (
     <>
-      {/* Focus Mode Guard — shown once at the start of every session */}
-      {showGuard && isActive && (
-        <FocusModeGuard onDismiss={() => setShowGuard(false)} />
-      )}
+      {isActive && !guardDismissed && <FocusModeGuard onDismiss={() => setGuardDismissed(true)} />}
+      {status === 'countdown' && countdown > 0 && <CountdownOverlay count={countdown} />}
 
-    <div
-      className="fixed inset-0 flex flex-col items-center justify-between transition-all duration-700"
-      style={{
-        background: '#FAFAF9',
-        opacity: eyesClosed ? 0.04 : 1,
-      }}
-    >
-      {/* Countdown overlay */}
-      {status === 'countdown' && <CountdownOverlay count={countdown} />}
-
-      {/* Top: phase info */}
-      <div className="flex flex-col items-center pt-14 gap-1 animate-fade-in">
-        <p className="text-xs text-stone-400 tracking-widest uppercase" style={{ letterSpacing: '0.2em' }}>
-          {preset.name}
-        </p>
-        <p className="text-base font-light text-stone-600">
-          {phase?.name ?? 'Starting...'}
-        </p>
-        {phaseState && (
-          <p className="text-xs text-stone-300 mt-1">
-            Phase {phaseState.phaseIndex + 1} of {preset.phases.length}
-          </p>
-        )}
-      </div>
-
-      {/* Center: breathing circle */}
-      <div className="flex flex-col items-center gap-8">
-        <BreathingCircle
-          breathStep={breathStep}
-          stepDuration={stepDuration}
-          stepElapsed={stepElapsed}
-          isRunning={status === 'running'}
-          phaseType={phase?.type ?? 'silent'}
-        />
-
-        {/* Timer */}
-        <div className="flex flex-col items-center gap-1">
-          <span className="text-4xl font-thin text-stone-600 tabular-nums">
-            {formatTime(remaining)}
-          </span>
-          <span className="text-xs text-stone-300">remaining</span>
+      <div className="fixed inset-0 flex flex-col items-center justify-between bg-bg">
+        {/* Top: phase info */}
+        <div className="flex flex-col items-center gap-1 px-6 text-center" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 40px)' }}>
+          <p className="text-[11px] font-medium uppercase tracking-eyebrow text-faint">{preset.name}</p>
+          <p className="text-lg font-light text-ink2">{phase.name}</p>
+          {preset.phases.length > 1 && (
+            <div className="mt-2 flex items-center gap-1.5" aria-label={`Phase ${phaseIndex + 1} of ${preset.phases.length}`}>
+              {preset.phases.map((p, i) => (
+                <span
+                  key={p.id}
+                  className={`h-1 rounded-full transition-all duration-500 ${
+                    i === phaseIndex ? 'w-6 bg-ink2/70' : i < phaseIndex ? 'w-1.5 bg-ink2/40' : 'w-1.5 bg-line/20'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Progress arc */}
-        <svg width={120} height={120} className="absolute opacity-20" style={{ top: '50%', transform: 'translateY(-50%)' }}>
-          <circle cx={60} cy={60} r={54} fill="none" stroke="#78716C" strokeWidth={1} />
-          <circle
-            cx={60} cy={60} r={54}
-            fill="none" stroke="#44403C" strokeWidth={2}
-            strokeDasharray={circumference}
-            strokeDashoffset={circumference * (1 - progress)}
-            strokeLinecap="round"
-            transform="rotate(-90 60 60)"
-            style={{ transition: 'stroke-dashoffset 1s linear' }}
+        {/* Centre: orb + timer */}
+        <div className="flex flex-col items-center gap-6">
+          <BreathingCircle
+            breathStep={snapshot?.breathStep ?? null}
+            stepDuration={snapshot?.breathStepDuration ?? 0}
+            stepElapsed={snapshot?.breathStepElapsedSec ?? 0}
+            isRunning={status === 'running'}
+            phaseType={phase.type}
+            progress={progress}
           />
-        </svg>
-      </div>
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-5xl font-extralight text-ink2 tabular-nums" id="session-remaining">{formatTime(remaining)}</span>
+            <span className="text-xs text-faint">
+              {status === 'paused' ? 'Paused' : preset.phases.length > 1 && snapshot
+                ? `${formatTime(snapshot.phaseRemainingSec)} left in this phase`
+                : 'remaining'}
+            </span>
+          </div>
+        </div>
 
-      {/* Bottom controls */}
-      <div className="flex flex-col items-center gap-4 pb-16 w-full px-8">
-        {/* Eyes closed toggle */}
-        <button
-          id="eyes-closed-btn"
-          onClick={() => setEyesClosed(e => !e)}
-          className="text-xs text-stone-300 tracking-widest uppercase"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.18em' }}
-        >
-          {eyesClosed ? 'Tap to see' : 'Eyes closed mode'}
-        </button>
-
-        <div className="flex gap-4 w-full">
-          {/* Pause / Resume */}
-          <button
-            id="pause-resume-btn"
-            onClick={status === 'paused' ? onResume : onPause}
-            className="flex-1 py-4 rounded-2xl text-sm font-medium transition-all"
-            style={{
-              background: '#F5F5F4', color: '#44403C',
-              border: '1.5px solid rgba(120,113,108,0.15)', cursor: 'pointer',
-            }}
-          >
-            {status === 'paused' ? 'Resume' : 'Pause'}
-          </button>
-
-          {/* End */}
-          <button
-            id="end-session-btn"
-            onClick={onEnd}
-            className="py-4 px-6 rounded-2xl text-sm font-medium transition-all"
-            style={{
-              background: 'transparent', color: '#A8A29E',
-              border: '1.5px solid rgba(120,113,108,0.12)', cursor: 'pointer',
-            }}
-          >
-            End
-          </button>
+        {/* Bottom controls */}
+        <div className="w-full max-w-[420px] px-6 flex flex-col items-center gap-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 28px)' }}>
+          <div className="flex items-center gap-1 text-xs text-faint">
+            <IconButton icon="eyeOff" label="Eyes closed mode" onClick={() => setEyesClosed(true)} id="eyes-closed-btn" />
+            <span>Eyes closed</span>
+          </div>
+          <div className="flex gap-3 w-full">
+            <Button
+              id="pause-resume-btn"
+              size="lg"
+              icon={status === 'paused' ? 'play' : 'pause'}
+              className="flex-1"
+              onClick={status === 'paused' ? onResume : onPause}
+              disabled={status === 'countdown'}
+            >
+              {status === 'paused' ? 'Resume' : 'Pause'}
+            </Button>
+            <HoldButton
+              id="end-session-btn"
+              onConfirm={handleEnd}
+              className="h-14 px-5 rounded-2xl text-sm font-medium text-muted border border-line/15"
+            >
+              <Icon name="stop" size={16} /> Hold to end
+            </HoldButton>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Eyes-closed mode: near-black screen, tap anywhere to return */}
+      {eyesClosed && (
+        <button
+          className="fixed inset-0 z-[60] bg-black/95 flex items-end justify-center animate-fade-in"
+          onClick={() => setEyesClosed(false)}
+          aria-label="Tap to show the session"
+        >
+          <span className="mb-16 text-[11px] uppercase tracking-eyebrow text-white/20">
+            {formatTime(remaining)} · tap to see
+          </span>
+        </button>
+      )}
     </>
   );
 };

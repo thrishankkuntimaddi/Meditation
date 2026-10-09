@@ -1,107 +1,71 @@
 import type { Preset } from '../types';
 
-const id = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
-
+/**
+ * Built-in presets. Ids are stable so the same defaults on two devices merge
+ * into one when synced instead of duplicating.
+ */
 export const DEFAULT_PRESETS: Preset[] = [
   {
-    id: id(),
+    id: 'default-morning',
     name: 'Morning',
-    totalDuration: 600, // 10 min
+    icon: 'sunrise',
+    totalDuration: 600,
     bellSound: 'crystal',
-    createdAt: Date.now(),
+    createdAt: 1,
     phases: [
       {
-        id: id(),
-        name: 'Breathing',
+        id: 'default-morning-1',
+        name: 'Box breathing',
         duration: 180,
         type: 'breathing',
-        breathing: {
-          pattern: 'square',
-          inhale: 4,
-          hold: 4,
-          exhale: 4,
-          holdAfterExhale: 4,
-        },
+        breathing: { pattern: 'square', inhale: 4, hold: 4, exhale: 4, holdAfterExhale: 4 },
       },
-      {
-        id: id(),
-        name: 'Stillness',
-        duration: 420,
-        type: 'interval',
-        intervalSeconds: 60,
-      },
+      { id: 'default-morning-2', name: 'Stillness', duration: 420, type: 'interval', intervalSeconds: 60 },
     ],
   },
   {
-    id: id(),
+    id: 'default-evening',
     name: 'Evening',
-    totalDuration: 900, // 15 min
+    icon: 'sunset',
+    totalDuration: 900,
     bellSound: 'bowl',
-    createdAt: Date.now(),
+    createdAt: 2,
     phases: [
       {
-        id: id(),
-        name: 'Breathing',
+        id: 'default-evening-1',
+        name: 'Relaxing breath',
         duration: 300,
         type: 'breathing',
-        breathing: {
-          pattern: 'triangle',
-          inhale: 4,
-          hold: 7,
-          exhale: 8,
-          holdAfterExhale: 0,
-        },
+        breathing: { pattern: 'triangle', inhale: 4, hold: 7, exhale: 8, holdAfterExhale: 0 },
       },
-      {
-        id: id(),
-        name: 'Interval',
-        duration: 300,
-        type: 'interval',
-        intervalSeconds: 60,
-      },
-      {
-        id: id(),
-        name: 'Silence',
-        duration: 300,
-        type: 'silent',
-      },
+      { id: 'default-evening-2', name: 'Interval', duration: 300, type: 'interval', intervalSeconds: 60 },
+      { id: 'default-evening-3', name: 'Silence', duration: 300, type: 'silent' },
     ],
   },
   {
-    id: id(),
+    id: 'default-night',
     name: 'Night',
-    totalDuration: 600, // 10 min
+    icon: 'moon',
+    totalDuration: 600,
     bellSound: 'bowl',
-    createdAt: Date.now(),
+    createdAt: 3,
     phases: [
       {
-        id: id(),
-        name: 'Deep Breathing',
+        id: 'default-night-1',
+        name: 'Deep breathing',
         duration: 600,
         type: 'breathing',
-        breathing: {
-          pattern: 'triangle',
-          inhale: 4,
-          hold: 7,
-          exhale: 8,
-          holdAfterExhale: 0,
-        },
+        breathing: { pattern: 'triangle', inhale: 4, hold: 7, exhale: 8, holdAfterExhale: 0 },
       },
     ],
   },
   {
-    id: id(),
-    name: 'Custom',
-    totalDuration: 300,
+    id: 'default-silent',
+    name: 'Silent sit',
+    icon: 'leaf',
+    totalDuration: 1200,
     bellSound: 'chime',
-    createdAt: Date.now(),
-    phases: [
-      {
-        id: id(),
-        name: 'Phase 1',
-        duration: 300,
-        type: 'silent',
-      },
-    ],
+    createdAt: 4,
+    phases: [{ id: 'default-silent-1', name: 'Silence', duration: 1200, type: 'silent' }],
   },
 ];

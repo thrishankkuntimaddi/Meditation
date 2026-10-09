@@ -1,43 +1,33 @@
 import React from 'react';
 import type { BellSound } from '../types';
-import { soundEngine } from '../engines/SoundEngine';
+import { BELLS, previewBell } from '../lib/bells';
+import Icon from './ui/Icon';
 
 interface Props {
   value: BellSound;
   onChange: (v: BellSound) => void;
 }
 
-const BELLS: { id: BellSound; label: string; desc: string }[] = [
-  { id: 'crystal', label: 'Crystal', desc: 'High, clear ring' },
-  { id: 'bowl',    label: 'Bowl',    desc: 'Deep, resonant tone' },
-  { id: 'chime',   label: 'Chime',   desc: 'Soft, melodic' },
-];
-
 const BellPicker: React.FC<Props> = ({ value, onChange }) => (
-  <div className="flex gap-2 flex-wrap">
-    {BELLS.map(b => (
-      <button
-        key={b.id}
-        id={`bell-${b.id}`}
-        onClick={() => {
-          // Unlock audio context (user gesture) then preview the bell
-          soundEngine.unlock();
-          soundEngine.setBellType(b.id);
-          soundEngine.playBell();
-          onChange(b.id);
-        }}
-        className="flex-1 min-w-[90px] flex flex-col items-center gap-1 py-3 px-2 rounded-xl transition-all duration-200"
-        style={{
-          background: value === b.id ? '#F5F5F4' : 'transparent',
-          border: `1.5px solid ${value === b.id ? '#78716C' : 'rgba(120,113,108,0.18)'}`,
-          cursor: 'pointer',
-        }}
-      >
-        <span className="text-lg">🔔</span>
-        <span className="text-xs font-medium text-stone-600">{b.label}</span>
-        <span className="text-xs text-stone-400 text-center">{b.desc}</span>
-      </button>
-    ))}
+  <div className="grid grid-cols-3 gap-2">
+    {BELLS.map(b => {
+      const active = value === b.id;
+      return (
+        <button
+          key={b.id}
+          id={`bell-${b.id}`}
+          onClick={() => { previewBell(b.id); onChange(b.id); }}
+          aria-pressed={active}
+          className={`flex flex-col items-center gap-1.5 py-3.5 px-2 rounded-2xl border transition-all duration-200 ${
+            active ? 'bg-surface border-line/40 text-ink2' : 'bg-transparent border-line/15 text-muted hover:border-line/30'
+          }`}
+        >
+          <Icon name="bell" size={20} />
+          <span className="text-[13px] font-medium">{b.label}</span>
+          <span className="text-[11px] text-faint">{b.desc}</span>
+        </button>
+      );
+    })}
   </div>
 );
 
