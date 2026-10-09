@@ -8,6 +8,7 @@ import {
   BREATHING_EXERCISES, BREATH_MINUTE_OPTIONS, exerciseToPreset, patternLabel,
 } from '../utils/breathingExercises';
 import PresetIcon from '../components/PresetIcon';
+import SetupCard from '../components/SetupCard';
 import { Button, Card, Icon, ScreenHeader, SectionLabel, Segmented, type IconName } from '../components/ui';
 
 interface Props {
@@ -67,6 +68,8 @@ const HomeScreen: React.FC<Props> = ({ onStartSession, onGoEditor }) => {
         <Stat icon="clock" value={String(totalMinutes(sessions))} label="Minutes" />
         <Stat icon="flame" value={String(computeStreak(sessions, now))} label="Day streak" />
       </div>
+
+      <SetupCard />
 
       <div className="px-6 mb-6">
         <Segmented

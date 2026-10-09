@@ -1,13 +1,18 @@
-import React, { useEffect, useState, useSyncExternalStore } from 'react';
+import React, { useState, useSyncExternalStore } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { signIn, signUp, signOutUser, resetPassword, authErrorMessage } from '../firebase/auth';
 import { usePWAUpdate } from '../hooks/usePWAUpdate';
 import { useSettings, useSyncStatus } from '../hooks/useStore';
 import { store } from '../lib/store';
-import { native, platform, isNative, type FocusCapabilities } from '../native';
-import { installPrompt, isIOS, isStandalone, RELEASES_URL } from '../lib/install';
+import { platform, isNative } from '../native';
+import { installPrompt, isIOS, isStandalone } from '../lib/install';
 import { previewBell } from '../lib/bells';
 import { soundEngine } from '../engines/SoundEngine';
+import DataSection from '../components/settings/DataSection';
+import FocusSection from '../components/settings/FocusSection';
+import RemindersSection from '../components/settings/RemindersSection';
+import AutostartRow from '../components/settings/AutostartRow';
+import DownloadRow from '../components/settings/DownloadRow';
 import {
   Button, Card, Field, Icon, Row, RowGroup, ScreenHeader, SectionLabel, Segmented, Stepper, Toggle,
 } from '../components/ui';
@@ -104,17 +109,6 @@ const ProfileScreen: React.FC = () => {
   const settings = useSettings();
   const { updateAvailable, updateApp } = usePWAUpdate();
   const canInstall = useSyncExternalStore(installPrompt.subscribe, installPrompt.available);
-  const [caps, setCaps] = useState<FocusCapabilities | null>(null);
-  const [deviceName, setDeviceName] = useState(settings.deviceName);
-
-  useEffect(() => {
-    native.capabilities().then(setCaps);
-    // Re-check after returning from Android's permission screen
-    const onVisible = () => { if (document.visibilityState === 'visible') native.capabilities().then(setCaps); };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, []);
-
   const set = store.updateSettings;
   const volumePct = Math.round(settings.volume * 100);
 
@@ -147,6 +141,20 @@ const ProfileScreen: React.FC = () => {
               <p className="mt-4 text-xs text-faint text-center">Without an account, everything is saved on this device.</p>
             </>
           )}
+        </section>
+
+        {/* Appearance */}
+        <section>
+          <SectionLabel>Appearance</SectionLabel>
+          <Segmented
+            value={settings.theme}
+            onChange={theme => set({ theme })}
+            options={[
+              { value: 'light', label: 'Light', icon: 'sun' },
+              { value: 'dark', label: 'Dark', icon: 'moon' },
+              { value: 'system', label: 'System', icon: 'devices' },
+            ]}
+          />
         </section>
 
         {/* Sound */}
@@ -188,51 +196,17 @@ const ProfileScreen: React.FC = () => {
           </RowGroup>
         </section>
 
-        {/* Focus & devices */}
-        <section>
-          <SectionLabel>Focus across devices</SectionLabel>
-          <RowGroup>
-            <Row icon="devices" title="Silence my other devices"
-              subtitle={user
-                ? 'While you meditate, every other device with the app open goes quiet until you finish.'
-                : 'Sign in to use this across devices. Works between windows on this device already.'}
-              right={<Toggle label="Silence my other devices" checked={settings.silenceOtherDevices} onChange={v => set({ silenceOtherDevices: v })} />} />
-            {caps && caps.systemDnd !== 'unsupported' && (
-              <Row icon="bellOff" title={platform === 'desktop' ? 'Mute & Focus on this computer' : 'System Do Not Disturb'}
-                subtitle={platform === 'android'
-                  ? caps.systemDnd === 'granted' ? 'Turns on Do Not Disturb during sessions (alarms still ring).' : 'Needs permission to change Do Not Disturb.'
-                  : 'Mutes this Mac while another device meditates. Runs your “Meditation Focus On/Off” Shortcuts if you have them.'}
-                right={caps.systemDnd === 'needs-permission'
-                  ? <Button size="sm" onClick={() => native.requestDndPermission()}>Allow</Button>
-                  : <Toggle label="System Do Not Disturb" checked={settings.systemDnd} onChange={v => set({ systemDnd: v })} />} />
-            )}
-            <div className="px-4 py-3.5 flex items-center gap-3.5">
-              <span className="w-9 h-9 rounded-xl bg-bg border border-line/10 flex items-center justify-center text-muted">
-                <Icon name="phone" size={18} />
-              </span>
-              <label className="flex-1 min-w-0">
-                <span className="block text-xs text-faint">This device’s name</span>
-                <input
-                  value={deviceName}
-                  onChange={e => setDeviceName(e.target.value)}
-                  onBlur={() => set({ deviceName: deviceName.trim() || settings.deviceName })}
-                  className="w-full bg-transparent text-sm text-ink2 outline-none"
-                  aria-label="Device name"
-                />
-              </label>
-            </div>
-          </RowGroup>
-          {!isNative && (
-            <p className="mt-2 px-1 text-xs text-faint leading-relaxed">
-              Browsers can’t switch on Do Not Disturb. Use the phone or desktop app for system-level silence.
-            </p>
-          )}
-        </section>
+        <RemindersSection />
+
+        <FocusSection />
+
+        <DataSection />
 
         {/* App */}
         <section>
           <SectionLabel>App</SectionLabel>
           <RowGroup>
+            {platform === 'desktop' && <AutostartRow />}
             {canInstall && (
               <Row icon="download" title="Install app" subtitle="Add Meditation to your home screen or dock" onClick={() => installPrompt.prompt()}
                 right={<Icon name="chevronRight" size={16} className="text-faint" />} />
@@ -241,9 +215,7 @@ const ProfileScreen: React.FC = () => {
               <Row icon="download" title="Install on iPhone" subtitle="Tap Share, then “Add to Home Screen”." />
             )}
             {!isNative && (
-              <Row icon="devices" title="Desktop & Android apps" subtitle="Download the installers"
-                onClick={() => window.open(RELEASES_URL, '_blank', 'noopener')}
-                right={<Icon name="chevronRight" size={16} className="text-faint" />} />
+              <DownloadRow />
             )}
             {!isNative && (
               <Row icon="refresh" title={updateAvailable ? 'Update available' : 'App is up to date'}

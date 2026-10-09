@@ -58,20 +58,27 @@ public class FocusModePlugin extends Plugin {
     @PluginMethod
     public void enable(PluginCall call) {
         boolean muteMedia = Boolean.TRUE.equals(call.getBoolean("muteMedia", false));
+        boolean dnd = false;
         try {
             NotificationManager nm = notifications();
             if (nm.isNotificationPolicyAccessGranted()) {
                 if (previousFilter == null) previousFilter = nm.getCurrentInterruptionFilter();
                 nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALARMS);
+                dnd = true;
             }
+        } catch (Exception ignored) {
+        }
+        try {
             if (muteMedia && !mutedMedia) {
                 audio().adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0);
                 mutedMedia = true;
             }
-            call.resolve();
-        } catch (Exception e) {
-            call.reject("Could not enable focus mode", e);
+        } catch (Exception ignored) {
         }
+        JSObject result = new JSObject();
+        result.put("dnd", dnd);
+        result.put("muted", mutedMedia);
+        call.resolve(result);
     }
 
     @PluginMethod

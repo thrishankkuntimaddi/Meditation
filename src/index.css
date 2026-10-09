@@ -19,8 +19,23 @@
   color-scheme: light;
 }
 
+:root[data-theme='dark'] {
+  --c-bg: 20 18 17;
+  --c-surface: 32 29 27;
+  --c-surface-2: 48 44 41;
+  --c-ink: 245 245 244;
+  --c-ink-2: 214 211 209;
+  --c-muted: 168 162 158;
+  --c-faint: 120 113 108;
+  --c-line: 214 211 209;
+  --c-danger: 248 113 113;
+  --c-ok: 134 197 152;
+  color-scheme: dark;
+}
+
+/* "System" follows the device setting */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root[data-theme='system'] {
     --c-bg: 20 18 17;
     --c-surface: 32 29 27;
     --c-surface-2: 48 44 41;

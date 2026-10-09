@@ -16,6 +16,11 @@ A calm, distraction-free meditation and breathing app — on the web, Android an
 - Bells synthesized on-device (Crystal, Bowl, Chime): one bell to start, two at each phase change, four at the end, plus optional soft breath cues and haptics.
 - **Focus mode** keeps the screen awake. **Hold to end** means an accidental tap can't stop a session. **Eyes-closed mode** dims the screen to near-black.
 
+**Reminders** (optional, off by default)
+- A daily meditation reminder and a separate breathing break, each with its own time and days.
+- Three styles to suit the person: **Gentle**, **Encouraging** or **Disciplined**. Each reminder carries one short line, and it adapts: "Day 5" on a streak, or a no-guilt welcome back after a few days away.
+- Minimal by design: silent by default, at most one of each per day, skipped if you've already practised, and never sent while you're meditating on any device.
+
 **Journey**
 - Streak, weekly and all-time minutes, a 7-day chart, and history grouped by day (including which device you used).
 - A session counts once you complete it, or end it after at least 75% of the planned time.
@@ -32,25 +37,34 @@ A calm, distraction-free meditation and breathing app — on the web, Android an
 - The meditating device itself turns on Do Not Disturb (Android) or runs your `Meditation Focus On` / `Meditation Focus Off` Shortcuts (macOS).
 
 **Design**
-- Warm stone palette, light Inter type, one consistent SVG icon set, and automatic light/dark themes.
+- Warm stone palette, light Inter type, and one consistent SVG icon set. Light, Dark or System theme, chosen per device.
+- **Reset data:** clear just this device, or delete everything from the cloud too.
 
 ## What each platform can do
 
-| | Web (PWA) | Android app | Desktop app (macOS / Windows / Linux) |
-|---|---|---|---|
-| Sessions, breathing, sync | ✅ | ✅ | ✅ |
-| Screen stays awake | ✅ (Wake Lock) | ✅ | ✅ |
-| Silenced while another device meditates | App sounds | App sounds + DND + media mute | App sounds + system mute (macOS) |
-| System Do Not Disturb while meditating | ❌ (browsers can't) | ✅ (grant access once) | macOS via Shortcuts |
+| | Web (PWA) | Android app | Mac app | Windows / Linux app |
+|---|---|---|---|---|
+| Sessions, breathing, sync | ✅ | ✅ | ✅ | ✅ |
+| Screen stays awake | ✅ | ✅ | ✅ | ✅ |
+| While **this** device meditates | — | Do Not Disturb (alarms only) | Alert sounds muted · Focus via Shortcuts | — |
+| While **another** device meditates | App sounds off | DND + media muted | System audio muted | System audio muted |
+| Reminders | Only while open | ✅ (even when closed) | ✅ (menu bar) | ✅ (system tray) |
 
-**iPhone/iPad:** install the PWA (Safari → Share → *Add to Home Screen*). iOS doesn't let apps change Focus or Silent mode, so the app reminds you to switch it on.
+**iPhone/iPad:** use the web app (Safari → Share → *Add to Home Screen*). iOS doesn't let apps change Focus or Silent mode.
 
 ## Install
 
-- **Android:** download `Meditation-android.apk` from Releases and open it (allow "install unknown apps" when asked). On first launch, go to Profile → *System Do Not Disturb* → **Allow**.
-- **macOS:** download the `.dmg` and drag Meditation to Applications. The build isn't notarized, so the first time, right-click the app → **Open**.
-- **Windows:** run the `.exe` installer.
-- **Web:** open the link above and choose *Install app* (Chrome or Edge) or *Add to Home Screen*.
+Download from [Releases](https://github.com/thrishankkuntimaddi/Meditation/releases/latest). Each release says which file is for which device and how to install it. On the website, **Profile → Get the … app** picks the right file for you.
+
+| Device | File | Size |
+|---|---|---|
+| Android | `Meditation-Android.apk` | ~4 MB |
+| Mac (Apple chip) | `Meditation-Mac-AppleSilicon.dmg` | ~2 MB |
+| Mac (Intel) | `Meditation-Mac-Intel.dmg` | ~2 MB |
+| Windows | `Meditation-Windows-Setup.exe` | ~3 MB |
+| Linux | `Meditation-Linux.AppImage` | — |
+
+The apps aren't sold through an app store, so your system shows a one-time warning on first install. The release notes explain how to get past it on each platform.
 
 ## Development
 
@@ -64,12 +78,15 @@ npm run build          # PWA → dist/
 ### Native builds
 
 ```bash
-npm run desktop        # run the desktop app locally
-npm run desktop:mac    # → release/*.dmg   (also desktop:win, desktop:linux)
+npm run desktop:build  # desktop app for this computer (needs Rust) → src-tauri/target/release/bundle/
 npm run android:sync   # build the web bundle and copy it into android/
 npm run android:open   # open in Android Studio (needs the Android SDK + JDK 21)
 npm run android:apk    # build a debug APK locally
 ```
+
+**Release signing (Android):** every release must be signed with the same key, or phones refuse to update. The CI reads it from four repository secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. Keep the keystore file backed up somewhere safe.
+
+**Releasing:** bump `"version"` in `package.json`, commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 Every push to `main` deploys the web app to GitHub Pages automatically (**Deploy web app** workflow). You don't need the Android SDK locally. **GitHub Actions → "Build apps"** builds the APK and the macOS, Windows and Linux installers in the cloud. Run it manually from the Actions tab, or push a tag such as `v2.0.0` to publish a Release.
 
@@ -82,11 +99,11 @@ All app data lives under `meditation_users/{uid}/…`. The `nistha-passi-core` F
 ```
 src/
   engines/     TimerEngine (wall-clock, background-safe) · PhaseManager (pure snapshot of any moment) · SoundEngine (Web Audio)
-  lib/         store (local-first, useSyncExternalStore) · sync (Firestore mirror) · focusSync (cross-device focus lock)
-  native/      one API over Web / Capacitor (Android) / Electron (desktop)
+  lib/         store (local-first) · sync (Firestore mirror) · focusSync (cross-device focus lock) · devices (presence) · reminders/ (copy, schedule, delivery) · theme
+  native/      one API over Web / Capacitor (Android) / Tauri (desktop)
   screens/     Home · Presets · Session · Journey · Profile
   components/  ui/ (Button, Card, Segmented, Toggle, Stepper, Dialog, HoldButton, Icon) + app components
-electron/      desktop shell: app:// scheme, keep-awake, macOS mute & Shortcuts
+src-tauri/     desktop shell (Tauri/Rust): tray, keep-awake, system mute, alert mute, Shortcuts, reminder scheduler, open at login
 android/       Capacitor project + FocusModePlugin.java (Do Not Disturb, media mute, keep-awake)
 ```
 
@@ -94,4 +111,4 @@ android/       Capacitor project + FocusModePlugin.java (Do Not Disturb, media m
 - **Sync:** last write wins for presets (with tombstones so deletions sync), sessions deduplicated by id, and a one-time import of history from v1's `sessions` collection.
 - **Focus lock:** BroadcastChannel covers windows on the same device; a Firestore doc (`meta/focus`, with `endsAt` and a heartbeat) covers other devices.
 
-Built with React 19, TypeScript, Vite, Tailwind CSS, Firebase, Capacitor 8 and Electron.
+Built with React 19, TypeScript, Vite, Tailwind CSS, Firebase, Capacitor 8 and Tauri 2.

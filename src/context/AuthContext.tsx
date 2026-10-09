@@ -3,6 +3,7 @@ import type { User } from 'firebase/auth';
 import { onAuthChange } from '../firebase/auth';
 import { startSync } from '../lib/sync';
 import { connectFocusCloud } from '../lib/focusSync';
+import { startPresence } from '../lib/devices';
 
 interface AuthContextType {
   user: User | null;
@@ -26,8 +27,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     connectFocusCloud(uid);
     if (!uid) return;
     const stop = startSync(uid);
+    const stopPresence = startPresence(uid);
     return () => {
       stop();
+      stopPresence();
       connectFocusCloud(null);
     };
   }, [uid]);

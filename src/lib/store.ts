@@ -57,12 +57,12 @@ export const getDeviceId = (): string => {
 
 export const guessDeviceName = (): string => {
   const ua = navigator.userAgent;
-  const isElectron = /Electron/i.test(ua);
+  const isApp = '__TAURI_INTERNALS__' in window;
   if (/iPhone/i.test(ua)) return 'iPhone';
   if (/iPad/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1)) return 'iPad';
   if (/Android/i.test(ua)) return /Mobile/i.test(ua) ? 'Android phone' : 'Android tablet';
-  if (/Macintosh|Mac OS X/i.test(ua)) return isElectron ? 'Mac (app)' : 'Mac';
-  if (/Windows/i.test(ua)) return isElectron ? 'Windows PC (app)' : 'Windows PC';
+  if (/Macintosh|Mac OS X/i.test(ua)) return isApp ? 'Mac (app)' : 'Mac';
+  if (/Windows/i.test(ua)) return isApp ? 'Windows PC (app)' : 'Windows PC';
   if (/Linux/i.test(ua)) return 'Linux';
   return 'This device';
 };
@@ -75,7 +75,27 @@ export const DEFAULT_SETTINGS: Settings = {
   silenceOtherDevices: true,
   systemDnd: true,
   deviceName: '',
+  theme: 'light',
+  reminders: {
+    meditation: { enabled: false, time: '07:00', days: [0, 1, 2, 3, 4, 5, 6] },
+    breathing: { enabled: false, time: '15:00', days: [1, 2, 3, 4, 5] },
+    tone: 'gentle',
+    sound: false,
+    skipIfPracticed: true,
+  },
 };
+
+/** Fill in fields added in later versions (nested objects included). */
+const withDefaults = (s: Partial<Settings>): Settings => ({
+  ...DEFAULT_SETTINGS,
+  ...s,
+  reminders: {
+    ...DEFAULT_SETTINGS.reminders,
+    ...(s.reminders ?? {}),
+    meditation: { ...DEFAULT_SETTINGS.reminders.meditation, ...(s.reminders?.meditation ?? {}) },
+    breathing: { ...DEFAULT_SETTINGS.reminders.breathing, ...(s.reminders?.breathing ?? {}) },
+  },
+});
 
 const normalisePreset = (p: Preset): Preset => ({
   ...p,
@@ -93,7 +113,7 @@ const loadInitial = (): StoreState => {
   }
   try { localStorage.setItem(KEYS.seeded, '1'); } catch { /* ignore */ }
 
-  const settings = { ...DEFAULT_SETTINGS, ...read<Partial<Settings>>(KEYS.settings, {}) };
+  const settings = withDefaults(read<Partial<Settings>>(KEYS.settings, {}));
   if (!settings.deviceName) settings.deviceName = guessDeviceName();
 
   const sessions = read<Session[]>(KEYS.sessions, [])
@@ -160,9 +180,25 @@ export const store = {
   updateSettings(patch: Partial<Settings>) {
     const settings = { ...state.settings, ...patch, updatedAt: Date.now() };
     setState({ settings });
-    // Device name is per-device: never pushed to the cloud
-    const { deviceName: _deviceName, ...shared } = patch;
+    // Device name and theme are per-device: never pushed to the cloud
+    const { deviceName: _deviceName, theme: _theme, ...shared } = patch;
     if (Object.keys(shared).length > 0) notifyChange({ type: 'settings', settings });
+  },
+
+  /** Wipe everything on this device back to a fresh install (device id is kept). */
+  resetLocal() {
+    const keep = state.settings.deviceName;
+    try {
+      [KEYS.presets, KEYS.sessions, KEYS.settings, KEYS.seeded, 'meditation_home_mode']
+        .forEach(k => localStorage.removeItem(k));
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('meditation_legacy_imported_'))
+        .forEach(k => localStorage.removeItem(k));
+    } catch { /* ignore */ }
+    const fresh = loadInitial();
+    state = { ...fresh, settings: { ...fresh.settings, deviceName: keep } };
+    write(KEYS.settings, state.settings);
+    emit();
   },
 
   // ── Remote merges (from the sync layer; do not echo back) ──
@@ -189,8 +225,8 @@ export const store = {
   },
   mergeRemoteSettings(remote: Partial<Settings>) {
     if ((remote.updatedAt ?? 0) <= (state.settings.updatedAt ?? 0)) return;
-    const { deviceName: _deviceName, ...shared } = remote;
-    setState({ settings: { ...state.settings, ...shared } });
+    const { deviceName: _deviceName, theme: _theme, ...shared } = remote;
+    setState({ settings: withDefaults({ ...state.settings, ...shared }) });
   },
 };
 

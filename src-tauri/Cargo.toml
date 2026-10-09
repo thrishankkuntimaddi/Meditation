@@ -1,0 +1,28 @@
+[package]
+name = "meditation"
+version = "2.1.0"
+description = "Meditation — calm meditation and breathing, synced across devices"
+authors = ["Thrishank Kuntimaddi"]
+edition = "2021"
+
+[lib]
+name = "meditation_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

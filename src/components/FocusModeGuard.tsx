@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Icon, { type IconName } from './ui/Icon';
-import { native, platform, type FocusCapabilities } from '../native';
+import { getDesktopInfo, native, platform, type DesktopOS, type FocusCapabilities } from '../native';
 import { useAuth } from '../context/AuthContext';
-import { useSettings } from '../hooks/useStore';
+import { useDevices, useFocusReport, useSettings } from '../hooks/useStore';
+import { getDeviceId } from '../lib/store';
+import { ONLINE_WINDOW_MS } from '../lib/devices';
 
 interface Props {
   onDismiss: () => void;
@@ -10,17 +12,24 @@ interface Props {
 
 const AUTO_DISMISS_S = 8;
 
+type Item = { icon: IconName; text: string; done: boolean; action?: React.ReactNode };
+
 /**
- * Shown when a session starts. Tells the user exactly what focus mode is doing
- * on *this* platform, and what they still need to do themselves.
+ * Shown when a session starts. Lists exactly what focus mode achieved on this
+ * device — ticks only for things that really happened — and what the user
+ * still needs to do themselves.
  */
 const FocusModeGuard: React.FC<Props> = ({ onDismiss }) => {
   const { user } = useAuth();
   const settings = useSettings();
+  const report = useFocusReport();
+  const devices = useDevices();
   const [caps, setCaps] = useState<FocusCapabilities | null>(null);
+  const [os, setOs] = useState<DesktopOS | null>(null);
   const [left, setLeft] = useState(AUTO_DISMISS_S);
   const [exiting, setExiting] = useState(false);
   const dismissedRef = useRef(false);
+  const [now] = useState(() => Date.now());
 
   const dismiss = React.useCallback(() => {
     if (dismissedRef.current) return;
@@ -29,7 +38,10 @@ const FocusModeGuard: React.FC<Props> = ({ onDismiss }) => {
     setTimeout(onDismiss, 300);
   }, [onDismiss]);
 
-  useEffect(() => { native.capabilities().then(setCaps); }, []);
+  useEffect(() => {
+    native.capabilities().then(setCaps);
+    getDesktopInfo()?.then(i => setOs(i.os)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setLeft(l => Math.max(0, l - 1)), 1000);
@@ -38,33 +50,47 @@ const FocusModeGuard: React.FC<Props> = ({ onDismiss }) => {
 
   useEffect(() => { if (left === 0) dismiss(); }, [left, dismiss]);
 
-  const items: { icon: IconName; text: string; done: boolean; action?: React.ReactNode }[] = [
-    { icon: 'sun', text: 'Screen will stay awake', done: true },
-    {
-      icon: 'devices',
-      text: user
-        ? settings.silenceOtherDevices ? 'Your other open devices go silent' : 'Silencing other devices is off'
-        : 'Sign in to silence your other devices',
-      done: !!user && settings.silenceOtherDevices,
-    },
-  ];
+  const me = getDeviceId();
+  const others = devices.filter(d => d.id !== me && now - d.lastSeen < ONLINE_WINDOW_MS);
 
-  if (caps?.systemDnd === 'granted' && settings.systemDnd && platform === 'android') {
-    items.push({ icon: 'bellOff', text: 'Do Not Disturb is on', done: true });
-  } else if (caps?.systemDnd === 'needs-permission' && settings.systemDnd) {
+  const items: Item[] = [{ icon: 'sun', text: 'Screen stays awake', done: true }];
+
+  // Other devices
+  if (!user) {
+    items.push({ icon: 'devices', text: 'Sign in to silence your other devices', done: false });
+  } else if (!settings.silenceOtherDevices) {
+    items.push({ icon: 'devices', text: 'Silencing other devices is turned off', done: false });
+  } else if (others.length === 0) {
+    items.push({ icon: 'devices', text: 'No other devices open right now', done: true });
+  } else {
     items.push({
-      icon: 'bellOff',
-      text: 'Allow Do Not Disturb access',
-      done: false,
-      action: (
-        <button
-          className="text-xs font-medium underline underline-offset-2 text-white/80"
-          onClick={() => { setLeft(AUTO_DISMISS_S + 20); native.requestDndPermission(); }}
-        >
-          Allow
-        </button>
-      ),
+      icon: 'devices',
+      text: `Silencing ${others.map(d => d.name).join(', ')}`,
+      done: true,
     });
+  }
+
+  // This device
+  if (platform === 'android') {
+    if (report?.dnd) items.push({ icon: 'bellOff', text: 'Do Not Disturb is on', done: true });
+    else if (caps?.systemDnd === 'needs-permission') {
+      items.push({
+        icon: 'bellOff', text: 'Allow Do Not Disturb access', done: false,
+        action: (
+          <button className="text-xs font-medium underline underline-offset-2 text-white/80"
+            onClick={() => { setLeft(AUTO_DISMISS_S + 20); native.requestDndPermission(); }}>
+            Allow
+          </button>
+        ),
+      });
+    } else items.push({ icon: 'bellOff', text: 'Turn on Do Not Disturb', done: false });
+  } else if (platform === 'desktop' && os === 'macos') {
+    items.push({ icon: 'volumeOff', text: 'Notification sounds muted', done: !!report?.alertsMuted });
+    items.push(report?.dnd
+      ? { icon: 'bellOff', text: 'Mac Focus is on', done: true }
+      : { icon: 'bellOff', text: 'Set up Mac Focus in Profile to hide banners', done: false });
+  } else if (platform === 'desktop') {
+    items.push({ icon: 'bellOff', text: os === 'windows' ? 'Turn on Do not disturb (Win + N)' : 'Turn on Do Not Disturb', done: false });
   } else {
     items.push({ icon: 'bellOff', text: 'Turn on Do Not Disturb / Silent', done: false });
   }
@@ -83,7 +109,7 @@ const FocusModeGuard: React.FC<Props> = ({ onDismiss }) => {
         </span>
         <div>
           <p className="text-lg font-medium text-white/95">Focus mode on</p>
-          <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-white/45">Nothing will disturb this session</p>
+          <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-white/45">Protecting this session</p>
         </div>
 
         <ul className="w-full flex flex-col gap-2">

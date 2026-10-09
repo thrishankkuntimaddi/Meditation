@@ -47,6 +47,24 @@ export interface Session {
   deviceName?: string;
 }
 
+export type ThemeMode = 'light' | 'dark' | 'system';
+export type ReminderKind = 'meditation' | 'breathing';
+export type ReminderTone = 'gentle' | 'encouraging' | 'disciplined';
+
+export interface ReminderPlan {
+  enabled: boolean;
+  time: string;            // "HH:MM", local time
+  days: number[];          // 0 = Sunday … 6 = Saturday
+}
+
+export interface ReminderSettings {
+  meditation: ReminderPlan;
+  breathing: ReminderPlan;
+  tone: ReminderTone;
+  sound: boolean;          // false = silent, low-key notification
+  skipIfPracticed: boolean;
+}
+
 export interface Settings {
   volume: number;          // 0..1
   breathCues: boolean;     // soft tone on every inhale / exhale change
@@ -55,6 +73,8 @@ export interface Settings {
   silenceOtherDevices: boolean;
   systemDnd: boolean;      // native only: toggle OS Do Not Disturb during a session
   deviceName: string;
+  theme: ThemeMode;
+  reminders: ReminderSettings;
   updatedAt?: number;
 }
 

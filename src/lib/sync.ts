@@ -10,7 +10,7 @@
  * from that collection are imported once.
  */
 import {
-  collection, doc, setDoc, onSnapshot, getDocs, query, where, orderBy, limit,
+  collection, doc, setDoc, onSnapshot, getDocs, query, where, orderBy, limit, writeBatch,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db, USERS_COLLECTION } from '../firebase/config';
@@ -67,7 +67,7 @@ export function startSync(uid: string): () => void {
   const pushPreset = (p: Preset) => push(setDoc(doc(presetsCol, p.id), p));
   const pushSession = (s: Session) => push(setDoc(doc(sessionsCol, s.id), { ...s, userId: uid }));
   const pushSettings = (s: Settings) => {
-    const { deviceName: _deviceName, ...shared } = s;
+    const { deviceName: _deviceName, theme: _theme, ...shared } = s;
     return push(setDoc(settingsDoc, shared));
   };
 
@@ -168,4 +168,26 @@ async function importLegacy(uid: string) {
     }
   }
   try { localStorage.setItem(flag, '1'); } catch { /* ignore */ }
+}
+
+/**
+ * Permanently delete this user's Meditation data from the cloud: presets,
+ * history, settings, devices, focus state and v1 history. Other apps' data in
+ * the shared Firebase project is never touched.
+ */
+export async function deleteCloudData(uid: string) {
+  const base = doc(db, USERS_COLLECTION, uid);
+  const refs = [];
+  for (const sub of ['presets', 'sessions', 'devices', 'meta']) {
+    const snap = await getDocs(collection(base, sub));
+    refs.push(...snap.docs.map(d => d.ref));
+  }
+  const legacy = await getDocs(query(collection(db, 'sessions'), where('userId', '==', uid))).catch(() => null);
+  if (legacy) refs.push(...legacy.docs.map(d => d.ref));
+  // Firestore batches hold up to 500 writes
+  for (let i = 0; i < refs.length; i += 450) {
+    const batch = writeBatch(db);
+    refs.slice(i, i + 450).forEach(r => batch.delete(r));
+    await batch.commit();
+  }
 }

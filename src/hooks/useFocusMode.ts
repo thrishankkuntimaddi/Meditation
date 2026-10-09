@@ -3,6 +3,7 @@ import { native } from '../native';
 import { soundEngine } from '../engines/SoundEngine';
 import { isFocusLive, remoteFocus, type FocusState } from '../lib/focusSync';
 import { store } from '../lib/store';
+import { focusReport } from '../lib/focusReport';
 
 const MEDITATING_TITLE = 'Meditating · Meditation';
 
@@ -32,7 +33,7 @@ export function useFocusMode(active: boolean) {
     const originalTitle = document.title;
     document.title = MEDITATING_TITLE;
     acquire();
-    native.enterFocus('self', systemDnd);
+    const entered = native.enterFocus('self', systemDnd).then(r => { if (!cancelled) focusReport.set(r); });
     document.addEventListener('visibilitychange', onVisible);
 
     return () => {
@@ -40,7 +41,9 @@ export function useFocusMode(active: boolean) {
       document.removeEventListener('visibilitychange', onVisible);
       wakeLock?.release().catch(() => {});
       document.title = originalTitle;
-      native.exitFocus('self', systemDnd);
+      focusReport.set(null);
+      // Always restore *after* entering finished, so DND can never get stuck on
+      entered.finally(() => native.exitFocus('self', systemDnd));
     };
   }, [active]);
 }
@@ -70,10 +73,10 @@ export function useListenerFocus(): FocusState | null {
     const { silenceOtherDevices, systemDnd } = store.getState().settings;
     if (!silenceOtherDevices) return;
     soundEngine.setSilenced(true);
-    native.enterFocus('listener', systemDnd);
+    const entered = native.enterFocus('listener', systemDnd);
     return () => {
       soundEngine.setSilenced(false);
-      native.exitFocus('listener', systemDnd);
+      entered.finally(() => native.exitFocus('listener', systemDnd));
     };
   }, [isLive]);
 

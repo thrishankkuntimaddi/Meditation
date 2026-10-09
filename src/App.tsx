@@ -9,6 +9,8 @@ import { useSettings } from './hooks/useStore';
 import { soundEngine } from './engines/SoundEngine';
 import { createPreset } from './lib/presets';
 import { platform } from './native';
+import { notify } from './lib/reminders/notify';
+import type { ReminderKind } from './types';
 
 import BottomNav from './components/BottomNav';
 import UpdateBanner from './components/UpdateBanner';
@@ -25,6 +27,7 @@ const AppInner: React.FC = () => {
   const { data: session, start, pause, resume, end, reset } = useSession();
   const { updateAvailable, updateApp } = usePWAUpdate();
   const remoteFocus = useListenerFocus();
+  const [homeKey, setHomeKey] = useState(0);
   const settings = useSettings();
   const inSession = screen === 'session' && session.preset !== null;
 
@@ -44,6 +47,30 @@ const AppInner: React.FC = () => {
     setEditorTarget(presetId === 'new' ? createPreset().id : presetId ?? null);
     setScreen('editor');
   };
+
+  // Tapping a reminder opens the matching practice on Home
+  useEffect(() => {
+    const open = (kind: ReminderKind) => {
+      try { localStorage.setItem('meditation_home_mode', kind === 'breathing' ? 'breathe' : 'meditate'); } catch { /* ignore */ }
+      setScreen(s => (s === 'session' ? s : 'home'));
+      setHomeKey(k => k + 1);
+    };
+    notify.onTap(open);
+    const practice = new URLSearchParams(window.location.search).get('practice');
+    if (practice === 'breathing' || practice === 'meditation') open(practice);
+  }, []);
+
+  // No reminders while anyone is meditating (here or on another device)
+  const sessionActive = session.status === 'countdown' || session.status === 'running' || session.status === 'paused';
+  const remoteKey = remoteFocus ? `${remoteFocus.endsAt}:${remoteFocus.remainingSec}` : '';
+  useEffect(() => {
+    const quiet = 10 * 60 * 1000;
+    if (sessionActive) notify.hold(Date.now() + session.remaining * 1000 + quiet);
+    else if (remoteFocus) notify.hold((remoteFocus.endsAt ?? Date.now() + remoteFocus.remainingSec * 1000) + quiet);
+    else notify.hold(0);
+    // Only re-plan on state changes, not every tick
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionActive, session.status, remoteKey]);
 
   const navigate = (s: Screen) => {
     if (s === 'editor') setEditorTarget(null);
@@ -81,7 +108,7 @@ const AppInner: React.FC = () => {
     <div className="relative min-h-full mx-auto max-w-[480px]">
       {updateAvailable && <UpdateBanner onUpdate={updateApp} />}
 
-      <main key={screen} className="animate-fade-in min-h-full">
+      <main key={`${screen}-${homeKey}`} className="animate-fade-in min-h-full">
         {screen === 'home' && <HomeScreen onStartSession={handleStart} onGoEditor={goEditor} />}
         {screen === 'editor' && (
           <EditorScreen initialPresetId={editorTarget} onDone={() => setScreen('home')} onStart={handleStart} />

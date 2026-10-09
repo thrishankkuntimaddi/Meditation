@@ -5,9 +5,16 @@ const config: CapacitorConfig = {
   appName: 'Meditation',
   webDir: 'dist-native',
   backgroundColor: '#FAFAF9',
-  android: {
-    // Bells use Web Audio inside the WebView; keep it running when the screen dims
-    allowMixedContent: false,
+  plugins: {
+    LocalNotifications: {
+      smallIcon: 'ic_stat_meditation',
+      iconColor: '#78716C',
+    },
+    StatusBar: {
+      overlaysWebView: false,
+      style: 'LIGHT',
+      backgroundColor: '#FAFAF9',
+    },
   },
 };
 
