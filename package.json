@@ -10,8 +10,6 @@
     "build:native": "tsc -b && vite build --mode native",
     "lint": "eslint .",
     "preview": "vite preview",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist",
     "desktop": "npm run build:native && electron .",
     "desktop:mac": "npm run build:native && electron-builder --mac",
     "desktop:win": "npm run build:native && electron-builder --win",
@@ -41,7 +39,6 @@
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
-    "gh-pages": "^6.3.0",
     "globals": "^17.4.0",
     "postcss": "^8.5.10",
     "tailwindcss": "^3.4.19",
@@ -50,13 +47,13 @@
     "vite": "^8.0.4",
     "vite-plugin-pwa": "^1.3.0"
   },
-  "description": "Calm, distraction-free meditation and breathing \u2014 web, Android and desktop, synced across devices.",
+  "description": "Calm, distraction-free meditation and breathing — web, Android and desktop, synced across devices.",
   "author": "Thrishank Kuntimaddi",
   "main": "electron/main.cjs",
   "build": {
     "appId": "com.thrishank.meditation",
     "productName": "Meditation",
-    "copyright": "\u00a9 Thrishank Kuntimaddi",
+    "copyright": "© Thrishank Kuntimaddi",
     "directories": {
       "output": "release",
       "buildResources": "assets"

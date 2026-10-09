@@ -59,7 +59,6 @@ npm install
 npm run dev            # http://localhost:5173/Meditation/
 npm run lint
 npm run build          # PWA → dist/
-npm run deploy         # publish dist/ to GitHub Pages
 ```
 
 ### Native builds
@@ -72,7 +71,7 @@ npm run android:open   # open in Android Studio (needs the Android SDK + JDK 21)
 npm run android:apk    # build a debug APK locally
 ```
 
-You don't need the Android SDK locally. **GitHub Actions → "Build apps"** builds the APK and the macOS, Windows and Linux installers in the cloud. Run it manually from the Actions tab, or push a tag such as `v2.0.0` to publish a Release.
+Every push to `main` deploys the web app to GitHub Pages automatically (**Deploy web app** workflow). You don't need the Android SDK locally. **GitHub Actions → "Build apps"** builds the APK and the macOS, Windows and Linux installers in the cloud. Run it manually from the Actions tab, or push a tag such as `v2.0.0` to publish a Release.
 
 ### Firestore rules (required for sync)
 
