@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Icon, { type IconName } from './Icon';
 
 export { Icon };
@@ -246,16 +247,19 @@ export const Dialog: React.FC<{
   }, [open, onCancel]);
 
   if (!open) return null;
-  return (
+  // Rendered into <body>: screens animate in, and an animated parent would
+  // otherwise trap the dialog underneath the bottom tab bar.
+  return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-ink/30 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[300] flex items-center justify-center px-4 bg-ink/30 backdrop-blur-sm animate-fade-in"
+      style={{ paddingTop: 'max(16px, env(safe-area-inset-top))', paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}
       onClick={onCancel}
     >
       <div
         role="alertdialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-sm rounded-3xl bg-bg border border-line/10 p-6 shadow-2xl animate-sheet-in pb-safe"
+        className="w-full max-w-sm max-h-full overflow-y-auto rounded-3xl bg-bg border border-line/10 p-6 shadow-2xl animate-sheet-in"
         onClick={e => e.stopPropagation()}
       >
         <h2 className="text-lg font-normal text-ink2">{title}</h2>
@@ -265,7 +269,8 @@ export const Dialog: React.FC<{
           <Button block variant={destructive ? 'danger' : 'primary'} onClick={onConfirm}>{confirmLabel}</Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
