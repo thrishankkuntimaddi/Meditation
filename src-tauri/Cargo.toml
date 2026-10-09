@@ -1,6 +1,6 @@
 [package]
 name = "meditation"
-version = "2.1.0"
+version = "2.1.1"
 description = "Meditation — calm meditation and breathing, synced across devices"
 authors = ["Thrishank Kuntimaddi"]
 edition = "2021"
